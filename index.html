@@ -249,16 +249,45 @@ function screenSuspicion(frames,dets){
 async function liveMonitor(){
  if(!stream)return;
  try{
-  var c=grab(q('video')),d=await detectVehicle(c),txt=instruction(d);
-  q('camStatus').className='camStatus '+(d.ok?'ok':'bad');q('camStatus').textContent=txt;
+  var c=grab(q('video')),d=await detectVehicle(c);
+
   if(d.ok){
-   metric('mVehicle','ok','Автомобиль','распознан');
-   metric('mArea',(d.area>.16&&d.area<.82)?'ok':'warn','Положение',
-          d.area<.16?'подойдите ближе':d.area>.82?'отойдите дальше':'подходит');
+   var edge=bboxTouchesEdge(d,c);
+   if(edge || d.area>.78){
+     q('camStatus').className='camStatus warn';
+     q('camStatus').textContent='Автомобиль виден, но не полностью помещается в кадр. Отойдите дальше и разместите весь автомобиль внутри рамки.';
+     metric('mVehicle','ok','Автомобиль','распознан');
+     metric('mArea','warn','Положение','отойдите дальше');
+   }else if(d.area<.16){
+     q('camStatus').className='camStatus warn';
+     q('camStatus').textContent='Автомобиль слишком далеко. Подойдите немного ближе.';
+     metric('mVehicle','ok','Автомобиль','распознан');
+     metric('mArea','warn','Положение','подойдите ближе');
+   }else{
+     q('camStatus').className='camStatus ok';
+     q('camStatus').textContent='Автомобиль найден. Поместите его полностью в рамку и выполните live-задание.';
+     metric('mVehicle','ok','Автомобиль','распознан');
+     metric('mArea','ok','Положение','подходит');
+   }
    metric('mLive','warn','Живая съемка','проверяется при снимке');
+  }else if(d.screen){
+   q('camStatus').className='camStatus bad';
+   q('camStatus').textContent='Обнаружен экран или электронное устройство. Снимайте настоящий автомобиль непосредственно камерой.';
+   metric('mVehicle','bad','Автомобиль','съемка с экрана');
+   metric('mLive','bad','Живая съемка','не подтверждена');
   }else{
-   metric('mVehicle','bad','Автомобиль',d.screen?'обнаружен экран':'не подтвержден');
-   if(d.screen)metric('mLive','bad','Живая съемка','съемка с экрана запрещена');
+   var sem=await semanticClasses(c);
+   if(semanticVehicle(sem)){
+     q('camStatus').className='camStatus warn';
+     q('camStatus').textContent='Автомобиль виден, но система не может выделить его целиком. Отойдите дальше и покажите весь автомобиль от бампера до бампера.';
+     metric('mVehicle','warn','Автомобиль','виден частично');
+     metric('mArea','warn','Положение','покажите весь ТС');
+   }else{
+     q('camStatus').className='camStatus bad';
+     q('camStatus').textContent='Автомобиль не подтвержден. Наведите камеру непосредственно на автомобиль и покажите его целиком.';
+     metric('mVehicle','bad','Автомобиль','не подтвержден');
+     metric('mArea','','Положение','—');
+   }
   }
  }catch(e){}
  setTimeout(liveMonitor,700);
@@ -274,13 +303,68 @@ function setAngle(){
 }
 
 async function captureAngle(){
- q('captureBtn').disabled=true;q('camStatus').className='camStatus warn';q('camStatus').textContent='Анализируем серию live-кадров…';
- var frames=[];for(var i=0;i<7;i++){frames.push(grab(q('video')));await new Promise(r=>setTimeout(r,230))}
- var dets=[];for(var j=0;j<frames.length;j++)dets.push(await detectVehicle(frames[j]));
+ q('captureBtn').disabled=true;
+ q('camStatus').className='camStatus warn';
+ q('camStatus').textContent='Проверяем автомобиль, полноту кадра и живую съемку…';
+
+ var frames=[];
+ for(var i=0;i<7;i++){
+   frames.push(grab(q('video')));
+   await new Promise(r=>setTimeout(r,230));
+ }
+
+ var dets=[];
+ for(var j=0;j<frames.length;j++)dets.push(await detectVehicle(frames[j]));
+
+ // Screen has priority over all other messages.
+ var screenFrame=dets.find(x=>x.screen);
+ if(screenFrame){
+   metric('mLive','bad','Живая съемка','обнаружен экран');
+   q('camStatus').className='camStatus bad';
+   q('camStatus').textContent='Кадр не принят: обнаружен экран/электронное устройство. Снимайте реальный автомобиль непосредственно камерой.';
+   q('captureBtn').disabled=false;
+   return;
+ }
+
  var good=dets.filter(x=>x.ok);
- if(good.length<6){q('camStatus').className='camStatus bad';q('camStatus').textContent='Автомобиль распознается нестабильно. Повторите.';q('captureBtn').disabled=false;return}
- var mid=good[Math.floor(good.length/2)],ins=instruction(mid);
- if(ins.indexOf('подходит')<0){q('camStatus').className='camStatus bad';q('camStatus').textContent=ins;q('captureBtn').disabled=false;return}
+
+ // A generic detector can be unstable on unusual angles.
+ // If the semantic classifier still sees a vehicle, give a framing instruction,
+ // not the misleading "car not recognized".
+ if(good.length<4){
+   var sem=await semanticClasses(frames[3]);
+   if(semanticVehicle(sem)){
+     q('camStatus').className='camStatus bad';
+     q('camStatus').textContent='Автомобиль виден, но не подтвержден целиком. Отойдите дальше и поместите весь автомобиль в рамку, затем повторите.';
+     metric('mVehicle','warn','Автомобиль','виден частично');
+     metric('mArea','warn','Положение','отойдите дальше');
+   }else{
+     q('camStatus').className='camStatus bad';
+     q('camStatus').textContent='Автомобиль не распознан стабильно. Покажите настоящий автомобиль целиком и повторите ракурс.';
+     metric('mVehicle','bad','Автомобиль','не подтвержден');
+   }
+   q('captureBtn').disabled=false;
+   return;
+ }
+
+ var mid=good[Math.floor(good.length/2)];
+
+ // Full-car framing check.
+ if(bboxTouchesEdge(mid,frames[3]) || mid.area>.78){
+   q('camStatus').className='camStatus bad';
+   q('camStatus').textContent='Автомобиль обрезан кадром. Отойдите дальше: должны быть видны автомобиль целиком и пространство вокруг него.';
+   metric('mArea','bad','Положение','автомобиль обрезан');
+   q('captureBtn').disabled=false;
+   return;
+ }
+ if(mid.area<.16){
+   q('camStatus').className='camStatus bad';
+   q('camStatus').textContent='Автомобиль слишком далеко. Подойдите немного ближе и повторите.';
+   metric('mArea','warn','Положение','слишком далеко');
+   q('captureBtn').disabled=false;
+   return;
+ }
+
  var live=screenSuspicion(frames,dets),light=luminance(frames[3]);
  metric('mQuality',(light>38&&light<220)?'ok':'bad','Качество',light>38&&light<220?'подходит':'нужно переснять');
  if(live.deviceHit){
@@ -413,6 +497,20 @@ async function semanticClasses(c){
 function classText(arr){return arr.map(x=>x.className.toLowerCase()).join(' | ')}
 function semanticHas(arr,words){
  var t=classText(arr);return words.some(w=>t.indexOf(w)>=0);
+}
+function semanticVehicle(arr){
+ return semanticHas(arr,[
+  'car','sports car','limousine','minivan','jeep','cab','convertible',
+  'racer','station wagon','pickup','van','vehicle'
+ ]);
+}
+function bboxTouchesEdge(d,c){
+ if(!d||!d.ok)return false;
+ var b=d.main.bbox, pad=.035;
+ return b[0] < c.width*pad ||
+        b[1] < c.height*pad ||
+        (b[0]+b[2]) > c.width*(1-pad) ||
+        (b[1]+b[3]) > c.height*(1-pad);
 }
 async function screenCheckForDoc(video){
  var frames=[], analyses=[];
