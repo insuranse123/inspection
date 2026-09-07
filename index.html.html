@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0e2c3a">
+<title>Евразия — Предстраховой осмотр</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+:root{--bg:#edf6f9;--card:#fff;--ink:#14364d;--muted:#718894;--line:#d6e5ec;--blue:#28579b;--cyan:#08a6d5;--green:#1e815e;--amber:#986919;--red:#b64d4d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink)}
+.app{max-width:580px;margin:0 auto;min-height:100vh;padding:calc(8px + env(safe-area-inset-top)) 12px calc(28px + env(safe-area-inset-bottom))}
+.top{position:sticky;top:0;z-index:80;padding:8px 0 9px;background:rgba(237,246,249,.95);backdrop-filter:blur(14px)}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.brand b{font-size:17px;color:#173f78}.brand small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+.badge{padding:6px 9px;border-radius:999px;font-size:9px;font-weight:900;border:1px solid #ead49b;background:#fff8e9;color:#8b651c}.badge.ok{background:#e8f7f0;border-color:#c8e5d7;color:var(--green)}.badge.bad{background:#fff0f0;border-color:#efcaca;color:var(--red)}
+.progress{height:5px;background:#dce9ef;border-radius:99px;margin-top:8px;overflow:hidden}.progress i{display:block;width:0;height:100%;background:linear-gradient(90deg,var(--cyan),#3158a4);transition:.25s}
+.step{display:none}.step.active{display:block}
+.card{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:0 8px 26px rgba(32,76,98,.06)}
+h1,h2,h3{margin:0;color:#173f78}h1{font-size:21px}h2{font-size:18px}h3{font-size:13px}
+.copy{font-size:12px;color:var(--muted);line-height:1.5;margin:6px 0 0}
+.note{margin-top:10px;padding:10px;border-radius:13px;border:1px solid #d9e7ee;background:#f5f9fb;font-size:10px;line-height:1.48;color:#617b88}.note b{color:#315d82}
+.note.green{background:#eaf8f1;border-color:#c9e5d8;color:#277259}.note.amber{background:#fff8e9;border-color:#ead6a3;color:#80631e}.note.red{background:#fff0f0;border-color:#efcaca;color:#9e4545}
+.field{margin-top:9px}.field label{display:block;font-size:9px;font-weight:800;color:#315d82;margin-bottom:5px}.field input{width:100%;padding:12px;border:1px solid #cfdfe7;border-radius:12px;background:#fff;color:#244b67;font-size:13px;text-transform:uppercase}
+.actions{display:grid;gap:8px;margin-top:12px}.btn{min-height:48px;border:1px solid #ccdee7;border-radius:14px;background:#f9fcfe;color:#2c628d;font-size:13px;font-weight:850}.btn.primary{border:0;background:linear-gradient(135deg,var(--cyan),#3159a5);color:#fff}.btn:disabled{opacity:.4}
+.cameraWrap{position:relative;margin-top:10px;border-radius:16px;overflow:hidden;background:#101820;aspect-ratio:3/4}
+video{width:100%;height:100%;object-fit:cover;display:block}
+canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.guide{position:absolute;inset:9%;border:2px dashed rgba(255,255,255,.82);border-radius:22px;box-shadow:0 0 0 999px rgba(0,0,0,.16);pointer-events:none}
+.challenge{position:absolute;left:10px;right:10px;top:10px;padding:9px 10px;border-radius:12px;background:rgba(7,24,34,.76);backdrop-filter:blur(7px);color:#fff;font-size:11px;line-height:1.4;font-weight:800}
+.camStatus{position:absolute;left:10px;right:10px;bottom:10px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.92);color:#31556d;font-size:9px;line-height:1.45}.camStatus.ok{background:rgba(231,248,239,.94);color:#227157}.camStatus.bad{background:rgba(255,237,237,.95);color:#a24444}.camStatus.warn{background:rgba(255,248,228,.95);color:#87651d}
+.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin-top:9px}.metric{padding:7px;border-radius:10px;background:#f0f5f7;border:1px solid #dce7ec;text-align:center}.metric b{display:block;font-size:9px;color:#315b7b}.metric span{display:block;font-size:8px;color:#738792;margin-top:2px}.metric.ok{background:#eaf7f0;border-color:#cce5d8}.metric.ok b{color:#247459}.metric.bad{background:#fff0f0;border-color:#efcaca}.metric.bad b{color:#a64a4a}.metric.warn{background:#fff7e8;border-color:#ead5a4}.metric.warn b{color:#8a681e}
+.taskList{display:grid;gap:8px;margin-top:10px}.task{border:1px solid #d8e5eb;border-radius:14px;padding:10px;background:#fbfdfe}.task.done{background:#f0faf5;border-color:#c7e3d5}.task.review{background:#fff9ed;border-color:#ead5a3}.task b{display:block;font-size:10px;color:#315a79}.task span{display:block;font-size:8.5px;color:#748894;margin-top:3px;line-height:1.4}
+.thumbGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}.thumb{border-radius:13px;overflow:hidden;border:1px solid #d8e5eb;background:#f5f8fa}.thumb img{width:100%;display:block;aspect-ratio:4/3;object-fit:cover}.thumb div{padding:7px;font-size:8px;color:#607985}
+.ocr{margin-top:8px;padding:9px;border-radius:11px;border:1px solid #dce8ed;background:#f6fafb;font:8px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:#607985;word-break:break-word}
+.final{margin-top:10px;padding:12px;border-radius:14px;font-size:11px;line-height:1.5}.final.ok{background:#eaf8f1;border:1px solid #c8e6d7;color:#257158}.final.review{background:#fff8e9;border:1px solid #ead5a0;color:#8b671d}
+.statusList{display:grid;gap:7px;margin-top:10px}.statusItem{padding:9px 10px;border-radius:12px;border:1px solid #d8e5eb;background:#f7fafb}.statusItem b{display:block;font-size:9px;color:#315a79}.statusItem span{display:block;font-size:8px;color:#718691;margin-top:3px}
+.footer{margin-top:15px;text-align:center;color:#8597a0;font-size:8.5px;line-height:1.45}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand">
+      <div><b>Евразия · Предстраховой осмотр</b><small>Идентификация · проверка · контроль</small></div>
+      <span id="serviceBadge" class="badge">Сервис загружается</span>
+    </div>
+    <div class="progress"><i id="bar"></i></div>
+  </div>
+
+  <section class="step active" data-step="0">
+    <div class="card">
+      <h1>Данные заявки</h1>
+      <p class="copy">В боевой системе эти данные приходят с сайта / 1С / ЛКК автоматически. Для теста введите их вручную.</p>
+      <div class="field"><label>VIN из заявки</label><input id="expectedVin" maxlength="17" placeholder="17 символов"></div>
+      <div class="field"><label>ГРНЗ из заявки</label><input id="expectedPlate" placeholder="Например 094MAX02"></div>
+      <div class="field"><label>Пробег из заявки, км (если известен)</label><input id="expectedOdo" inputmode="numeric" placeholder="Например 215000"></div>
+      <div id="bootInfo" class="note">Подготовка сервиса…</div>
+      <div class="note amber"><b>Контроль частей ТС:</b> система проверяет наличие автомобиля и ожидаемые зоны/ориентиры. Неуверенный результат не приводит к автоматическому отказу и направляется специалисту.</div>
+      <div class="actions"><button id="startBtn" class="btn primary" disabled>Подготовка сервиса…</button></div>
+    </div>
+  </section>
+
+  <section class="step" data-step="1">
+    <div class="card">
+      <h2 id="stepTitle">Кузов</h2>
+      <p class="copy">Система в реальном времени подсказывает положение автомобиля. Галерея не используется.</p>
+      <div class="cameraWrap">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="overlay" class="overlay"></canvas>
+        <div class="guide"></div>
+        <div id="challenge" class="challenge"></div>
+        <div id="camStatus" class="camStatus">Ожидание камеры…</div>
+      </div>
+      <div class="metrics">
+        <div id="mVehicle" class="metric"><b>Автомобиль</b><span>—</span></div>
+        <div id="mArea" class="metric"><b>Положение</b><span>—</span></div>
+        <div id="mLive" class="metric"><b>Live / экран</b><span>—</span></div>
+        <div id="mQuality" class="metric"><b>Качество</b><span>—</span></div>
+      </div>
+      <div id="partHint" class="note"><b>Ожидаемые ориентиры:</b> система проверит ракурс и даст сигнал, если детали/зоны не соответствуют ожидаемой стороне.</div>
+      <div class="actions">
+        <button id="captureBtn" class="btn primary" disabled>Проверить серию и снять</button>
+        <button id="restartCamBtn" class="btn">Перезапустить камеру</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" data-step="2">
+    <div class="card">
+      <h2>Документы и идентификация</h2>
+      <p class="copy">Каждый контрольный объект снимается live-камерой. OCR сравнивает найденные данные с заявкой.</p>
+      <div id="docTasks" class="taskList"></div>
+      <div class="cameraWrap">
+        <video id="docVideo" playsinline autoplay muted></video>
+        <canvas id="docOverlay" class="overlay"></canvas>
+        <div class="guide"></div>
+        <div id="docChallenge" class="challenge">Выберите контрольный объект выше</div>
+        <div id="docStatus" class="camStatus">Ожидание задания…</div>
+      </div>
+      <div id="ocrBox" class="ocr">OCR: —</div>
+      <div class="actions"><button id="docCaptureBtn" class="btn primary" disabled>Снять и сверить</button><button id="docsNext" class="btn" disabled>Далее</button></div>
+    </div>
+  </section>
+
+  <section class="step" data-step="3">
+    <div class="card">
+      <h2>Итог первичного контроля</h2>
+      <div id="summary"></div>
+      <div id="thumbs" class="thumbGrid"></div>
+      <div id="statusList" class="statusList"></div>
+      <div class="actions"><button id="restartBtn" class="btn">Новый тест</button></div>
+    </div>
+  </section>
+
+  <div class="footer">Тестовый сервис. Автоматический результат не используется как самостоятельное основание для отказа. Спорные сигналы направляются специалисту.</div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+var detector=null, stream=null, docStream=null, current=0, currentDoc=null;
+var angles=[
+ {name:'Передняя левая · 45°', expected:'передняя часть + левая боковая часть', parts:['фара','передний бампер','переднее колесо','зеркало']},
+ {name:'Передняя правая · 45°', expected:'передняя часть + правая боковая часть', parts:['фара','передний бампер','переднее колесо','зеркало']},
+ {name:'Задняя правая · 45°', expected:'задняя часть + правая боковая часть', parts:['задний фонарь','задний бампер','заднее колесо']},
+ {name:'Задняя левая · 45°', expected:'задняя часть + левая боковая часть', parts:['задний фонарь','задний бампер','заднее колесо']}
+];
+var docDefs=[
+ {id:'srtsFront',title:'СРТС · лицевая сторона',mode:'doc',required:true},
+ {id:'srtsBack',title:'СРТС · обратная сторона',mode:'doc',required:true},
+ {id:'vin',title:'VIN на автомобиле',mode:'vin',required:true},
+ {id:'plate',title:'ГРНЗ на автомобиле',mode:'plate',required:true},
+ {id:'odo',title:'Одометр',mode:'odo',required:true},
+ {id:'salon',title:'Салон / мультимедиа',mode:'plain',required:true},
+ {id:'trunk',title:'Багажник / допоборудование',mode:'plain',required:true}
+];
+var results=[], docs={}, reasons=[], liveHistory=[];
+
+var q=id=>document.getElementById(id);
+var qa=s=>Array.prototype.slice.call(document.querySelectorAll(s));
+function norm(s){return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
+function addReason(r){if(reasons.indexOf(r)<0)reasons.push(r)}
+function go(n){qa('.step').forEach(x=>x.classList.toggle('active',Number(x.dataset.step)===n));q('bar').style.width=(n/3*100)+'%';window.scrollTo(0,0)}
+function metric(id,cls,b,t){var e=q(id);e.className='metric '+(cls||'');e.querySelector('b').textContent=b;e.querySelector('span').textContent=t}
+
+async function init(){
+ try{
+  detector=await cocoSsd.load({base:'lite_mobilenet_v2'});
+  q('serviceBadge').textContent='Сервис готов';q('serviceBadge').className='badge ok';
+  q('bootInfo').className='note green';q('bootInfo').innerHTML='<b>Сервис готов.</b> Распознавание документов загрузится при первом документе.';
+  q('startBtn').disabled=false;q('startBtn').textContent='Начать осмотр';
+ }catch(e){
+  q('serviceBadge').textContent='Ошибка сервиса';q('serviceBadge').className='badge bad';
+  q('bootInfo').className='note red';q('bootInfo').textContent='Не удалось загрузить модель: '+e;
+ }
+}
+
+async function openCamera(videoId,kind){
+ var old=kind==='docs'?docStream:stream;if(old)old.getTracks().forEach(t=>t.stop());
+ var s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+ q(videoId).srcObject=s;await q(videoId).play();
+ if(kind==='docs')docStream=s;else stream=s;
+ return s;
+}
+function grab(video){
+ var c=document.createElement('canvas');c.width=video.videoWidth||1280;c.height=video.videoHeight||720;c.getContext('2d').drawImage(video,0,0,c.width,c.height);return c
+}
+function luminance(c){
+ var x=c.getContext('2d',{willReadFrequently:true}),d=x.getImageData(0,0,c.width,c.height).data;
+ var st=Math.max(4,Math.floor(c.width*c.height/70000))*4,s=0,n=0;
+ for(var i=0;i<d.length;i+=st){s+=.299*d[i]+.587*d[i+1]+.114*d[i+2];n++}
+ return s/n
+}
+function hash(c){
+ var s=document.createElement('canvas');s.width=16;s.height=16;var x=s.getContext('2d');x.drawImage(c,0,0,16,16);
+ var d=x.getImageData(0,0,16,16).data,v=[];for(var i=0;i<d.length;i+=4)v.push(.299*d[i]+.587*d[i+1]+.114*d[i+2]);
+ var a=v.reduce((x,y)=>x+y,0)/v.length;return v.map(z=>z>=a?1:0)
+}
+function dist(a,b){var n=0;for(var i=0;i<a.length;i++)if(a[i]!==b[i])n++;return n/a.length}
+
+async function detectVehicle(c){
+ var p=await detector.detect(c,10,.35),v=p.filter(x=>['car','truck','bus','motorcycle'].includes(x.class)).sort((a,b)=>b.score-a.score);
+ if(!v.length)return {ok:false,reason:'Автомобиль не распознан'};
+ var m=v[0],b=m.bbox,area=b[2]*b[3]/(c.width*c.height),cx=(b[0]+b[2]/2)/c.width,cy=(b[1]+b[3]/2)/c.height;
+ if(v.length>1&&v[1].score>.52)return {ok:false,reason:'В кадре несколько автомобилей'};
+ if(m.score<.5)return {ok:false,reason:'Низкая уверенность распознавания'};
+ return {ok:true,main:m,area,cx,cy};
+}
+function instruction(d){
+ if(!d.ok)return d.reason;
+ if(d.area<.16)return 'Подойдите ближе к автомобилю';
+ if(d.area>.82)return 'Отойдите дальше — автомобиль не помещается';
+ if(d.cx<.38)return 'Сместите телефон левее относительно автомобиля';
+ if(d.cx>.62)return 'Сместите телефон правее относительно автомобиля';
+ if(d.cy<.35)return 'Опустите телефон немного ниже';
+ if(d.cy>.68)return 'Поднимите телефон немного выше';
+ return 'Положение подходит. Выполните live-задание и снимайте.';
+}
+function screenSuspicion(frames,dets){
+ var hs=frames.map(hash),motion=0;for(var i=1;i<hs.length;i++)motion+=dist(hs[i-1],hs[i]);motion/=(hs.length-1);
+ var areas=dets.filter(x=>x.ok).map(x=>x.area),areaVar=0;
+ if(areas.length>1){var av=areas.reduce((a,b)=>a+b,0)/areas.length;areaVar=Math.sqrt(areas.reduce((s,x)=>s+(x-av)*(x-av),0)/areas.length)}
+ var score=0;
+ if(motion<.018)score+=55;
+ if(areaVar<.004)score+=25;
+ var light=luminance(frames[Math.floor(frames.length/2)]);
+ if(light>235||light<25)score+=10;
+ return {motion,areaVar,score:Math.min(100,score)};
+}
+
+async function liveMonitor(){
+ if(!stream)return;
+ try{
+  var c=grab(q('video')),d=await detectVehicle(c),txt=instruction(d);
+  q('camStatus').className='camStatus '+(d.ok?'ok':'bad');q('camStatus').textContent=txt;
+  if(d.ok){
+   metric('mVehicle','ok','Автомобиль',Math.round(d.main.score*100)+'%');
+   metric('mArea',(d.area>.16&&d.area<.82)?'ok':'warn','Положение',Math.round(d.area*100)+'% кадра');
+  }else metric('mVehicle','bad','Автомобиль','не найден');
+ }catch(e){}
+ setTimeout(liveMonitor,700);
+}
+
+function setAngle(){
+ var a=angles[current];
+ q('stepTitle').textContent='Ракурс '+(current+1)+' из 4 · '+a.name;
+ var challenges=['сделайте небольшой шаг ближе и вернитесь','сместите телефон на 20–30 см влево и вернитесь','сместите телефон на 20–30 см вправо и вернитесь','немного опустите телефон и верните в исходное положение'];
+ a.challenge=challenges[Math.floor(Math.random()*challenges.length)];
+ q('challenge').textContent='Live-задание: '+a.name+'. '+a.challenge+'.';
+ q('partHint').innerHTML='<b>Ожидаемые зоны:</b> '+a.expected+'. Контрольные ориентиры: '+a.parts.join(', ')+'.';
+}
+
+async function captureAngle(){
+ q('captureBtn').disabled=true;q('camStatus').className='camStatus warn';q('camStatus').textContent='Анализируем серию live-кадров…';
+ var frames=[];for(var i=0;i<7;i++){frames.push(grab(q('video')));await new Promise(r=>setTimeout(r,230))}
+ var dets=[];for(var j=0;j<frames.length;j++)dets.push(await detectVehicle(frames[j]));
+ var good=dets.filter(x=>x.ok);
+ if(good.length<6){q('camStatus').className='camStatus bad';q('camStatus').textContent='Автомобиль распознается нестабильно. Повторите.';q('captureBtn').disabled=false;return}
+ var mid=good[Math.floor(good.length/2)],ins=instruction(mid);
+ if(ins.indexOf('подходит')<0){q('camStatus').className='camStatus bad';q('camStatus').textContent=ins;q('captureBtn').disabled=false;return}
+ var live=screenSuspicion(frames,dets),light=luminance(frames[3]);
+ metric('mLive',live.score<50?'ok':'bad','Live / экран','риск '+live.score+'/100');
+ metric('mQuality',(light>38&&light<220)?'ok':'bad','Качество','свет '+light.toFixed(0));
+ if(live.score>=50){q('camStatus').className='camStatus bad';q('camStatus').textContent='Признаки слишком статичной сцены / возможной пересъемки экрана. Выполните движение отчетливее.';addReason('Антиспуфинг: подозрение на статичное изображение, ракурс '+(current+1));q('captureBtn').disabled=false;return}
+ if(light<=38||light>=220){q('camStatus').className='camStatus bad';q('camStatus').textContent=light<=38?'Слишком темно. Перейдите на свет.':'Сильный пересвет. Измените положение.';q('captureBtn').disabled=false;return}
+ var shot=frames[3],url=shot.toDataURL('image/jpeg',.85);
+ results.push({name:angles[current].name,image:url,score:mid.main.score,area:mid.area,screenRisk:live.score,parts:angles[current].parts});
+ q('camStatus').className='camStatus ok';q('camStatus').textContent='✓ Ракурс принят. Автомобиль и live-сессия подтверждены.';
+ current++;
+ if(current>=4){stream.getTracks().forEach(t=>t.stop());buildDocs();go(2);await startDocs();return}
+ setAngle();q('captureBtn').disabled=false;
+}
+
+function buildDocs(){
+ var box=q('docTasks');box.innerHTML='';
+ docDefs.forEach(d=>{
+  var el=document.createElement('button');el.className='task';el.id='task_'+d.id;el.innerHTML='<b>'+d.title+'</b><span>Нажмите для съемки</span>';
+  el.onclick=()=>selectDoc(d);box.appendChild(el)
+ })
+}
+async function startDocs(){
+ await openCamera('docVideo','docs');q('docStatus').className='camStatus ok';q('docStatus').textContent='Камера готова. Выберите объект выше.';
+}
+function selectDoc(d){
+ currentDoc=d;qa('.task').forEach(x=>x.style.outline='');q('task_'+d.id).style.outline='2px solid #6aa8d0';
+ q('docChallenge').textContent='Снимите: '+d.title+'. Держите объект ровно, крупно и без бликов.';
+ q('docCaptureBtn').disabled=false;q('ocrBox').textContent='OCR: ожидается снимок';
+}
+function cropCanvas(c,x,y,w,h){
+ var out=document.createElement('canvas');
+ out.width=Math.max(1,Math.round(c.width*w));
+ out.height=Math.max(1,Math.round(c.height*h));
+ out.getContext('2d').drawImage(
+   c,
+   Math.round(c.width*x),Math.round(c.height*y),
+   Math.round(c.width*w),Math.round(c.height*h),
+   0,0,out.width,out.height
+ );
+ return out;
+}
+function preprocessCanvas(c,scale){
+ var out=document.createElement('canvas');
+ out.width=Math.round(c.width*(scale||2));
+ out.height=Math.round(c.height*(scale||2));
+ var x=out.getContext('2d',{willReadFrequently:true});
+ x.drawImage(c,0,0,out.width,out.height);
+ var im=x.getImageData(0,0,out.width,out.height),d=im.data;
+ for(var i=0;i<d.length;i+=4){
+   var g=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+   var v=g>155?255:g<95?0:Math.round((g-95)*255/60);
+   d[i]=d[i+1]=d[i+2]=v;
+ }
+ x.putImageData(im,0,0);
+ return out;
+}
+async function ocrCanvas(c,whitelist){
+ try{
+  var opts={logger:m=>{if(m.status==='recognizing text')q('ocrBox').textContent='OCR '+Math.round((m.progress||0)*100)+'%'}};
+  if(whitelist) opts.tessedit_char_whitelist=whitelist;
+  var r=await Tesseract.recognize(c,'eng',opts);
+  return {text:(r.data.text||'').toUpperCase().replace(/\s+/g,' ').trim(),confidence:r.data.confidence||0};
+ }catch(e){return {text:'',confidence:0,error:String(e)}}
+}
+function extract(text,mode){
+ var clean=norm(text);
+ if(mode==='vin'){
+   var all=clean.match(/[A-HJ-NPR-Z0-9]{15,19}/g)||[];
+   all=all.map(s=>s.replace(/[IOQ]/g,'')).filter(s=>s.length>=17);
+   return all.length?all.sort((a,b)=>Math.abs(a.length-17)-Math.abs(b.length-17))[0].slice(0,17):'';
+ }
+ if(mode==='plate'){
+   var p=clean.match(/\d{3}[A-Z]{2,3}\d{2}/);
+   return p?p[0]:'';
+ }
+ if(mode==='odo'){
+   var nums=text.match(/\b\d{3,7}\b/g);
+   return nums&&nums.length?nums.sort((a,b)=>b.length-a.length)[0]:'';
+ }
+ return '';
+}
+async function readSrtsFields(c){
+ // KZ СРТС: тестовая разметка по фото карточки. В боевой версии зоны должны
+ // калиброваться по шаблону документа/детектору углов.
+ var plateCrop=preprocessCanvas(cropCanvas(c,.05,.22,.42,.17),2.4);
+ var vinCrop=preprocessCanvas(cropCanvas(c,.42,.72,.52,.18),2.4);
+ var modelCrop=preprocessCanvas(cropCanvas(c,.32,.20,.62,.24),2.0);
+
+ var plateO=await ocrCanvas(plateCrop,'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+ var vinO=await ocrCanvas(vinCrop,'ABCDEFGHJKLMNPRSTUVWXYZ0123456789');
+ var modelO=await ocrCanvas(modelCrop);
+
+ return {
+   plate:extract(plateO.text,'plate'),
+   vin:extract(vinO.text,'vin'),
+   modelText:modelO.text,
+   debug:{plateText:plateO.text,vinText:vinO.text,modelText:modelO.text}
+ };
+}
+async function captureDoc(){
+ if(!currentDoc)return;
+ q('docCaptureBtn').disabled=true;q('docStatus').className='camStatus warn';q('docStatus').textContent='Проверяем…';
+ var c=grab(q('docVideo')),light=luminance(c);
+ if(light<35||light>225){q('docStatus').className='camStatus bad';q('docStatus').textContent='Проблема с освещением. Переснимите.';q('docCaptureBtn').disabled=false;return}
+ var o={text:'',confidence:0},found='',match=true,srts=null;
+ if(currentDoc.mode==='vin'){
+   o=await ocrCanvas(preprocessCanvas(c,2.2),'ABCDEFGHJKLMNPRSTUVWXYZ0123456789');
+   found=extract(o.text,'vin');
+   match=!!found && found===norm(q('expectedVin').value);
+ }
+ if(currentDoc.mode==='plate'){
+   o=await ocrCanvas(preprocessCanvas(c,2.2),'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+   found=extract(o.text,'plate');
+   match=!!found && found===norm(q('expectedPlate').value);
+ }
+ if(currentDoc.mode==='odo'){
+   o=await ocrCanvas(preprocessCanvas(c,2.0),'0123456789');
+   found=extract(o.text,'odo');
+   var e=q('expectedOdo').value.replace(/\D/g,'');
+   match=!e||(!isNaN(+found)&&Math.abs(+found-+e)<=1000);
+ }
+ if(currentDoc.mode==='doc'){
+   srts=await readSrtsFields(c);
+   var ev=norm(q('expectedVin').value),ep=norm(q('expectedPlate').value);
+   var vinMatch=!!srts.vin && srts.vin===ev;
+   var plateMatch=!!srts.plate && srts.plate===ep;
+   match=vinMatch||plateMatch;
+   found='VIN: '+(srts.vin||'не найден')+' | ГРНЗ: '+(srts.plate||'не найден');
+   o.text='VIN zone: '+srts.debug.vinText+' | PLATE zone: '+srts.debug.plateText+' | MODEL zone: '+srts.debug.modelText;
+   o.confidence=match?85:35;
+ }
+ var url=c.toDataURL('image/jpeg',.82);
+ docs[currentDoc.id]={image:url,text:o.text,found,match,confidence:o.confidence,srts:srts};
+ var task=q('task_'+currentDoc.id);
+ if(match){task.className='task done';task.querySelector('span').textContent='✓ Принято'+(found?' · '+found:'');q('docStatus').className='camStatus ok';q('docStatus').textContent='✓ Сверка пройдена.'}
+ else{task.className='task review';task.querySelector('span').textContent='⚠ Требуется проверка'+(found?' · '+found:'');q('docStatus').className='camStatus warn';q('docStatus').textContent='Данные не подтверждены автоматически. Кейс будет отмечен для специалиста.';addReason(currentDoc.title+': автоматическая сверка не пройдена')}
+ if(currentDoc.mode==='doc' && srts){
+   q('ocrBox').innerHTML=
+     '<b>Распознано по зонам СРТС:</b><br>'+
+     'ГРНЗ: '+(srts.plate||'не найден')+'<br>'+
+     'VIN: '+(srts.vin||'не найден')+'<br>'+
+     'Марка/модель: '+(srts.modelText||'не распознано')+'<br><br>'+
+     '<span style="opacity:.7">Сверка с заявкой: '+(match?'СОВПАДЕНИЕ':'ТРЕБУЕТ ПРОВЕРКИ')+'</span>';
+ }else{
+   q('ocrBox').textContent='OCR ('+Math.round(o.confidence)+'%): '+(o.text||'нет уверенного текста');
+ }
+ q('docCaptureBtn').disabled=false;
+ q('docsNext').disabled=docDefs.some(d=>!docs[d.id]);
+}
+function renderFinal(){
+ if(docStream)docStream.getTracks().forEach(t=>t.stop());
+ var html=reasons.length?'<div class="final review"><b>⚠ Передать специалисту / на видеоосмотр.</b><br>Есть сигналы, которые нельзя подтверждать автоматически.</div>':'<div class="final ok"><b>✓ Первичный автоматический контроль пройден.</b><br>Ракурсы, live-сессия и обязательные контрольные материалы получены.</div>';
+ q('summary').innerHTML=html;
+ var tb=q('thumbs');tb.innerHTML='';results.forEach(r=>{var d=document.createElement('div');d.className='thumb';d.innerHTML='<img src="'+r.image+'"><div><b>'+r.name+'</b><br>авто '+Math.round(r.score*100)+'% · экран-риск '+r.screenRisk+'/100<br>ориентиры: '+r.parts.join(', ')+'</div>';tb.appendChild(d)});
+ q('statusList').innerHTML=
+  '<div class="statusItem"><b>Ракурсы ТС</b><span>'+results.length+'/4</span></div>'+
+  '<div class="statusItem"><b>Контрольные материалы</b><span>'+Object.keys(docs).length+'/'+docDefs.length+'</span></div>'+
+  '<div class="statusItem"><b>VIN заявки</b><span>'+norm(q('expectedVin').value)+'</span></div>'+
+  '<div class="statusItem"><b>ГРНЗ заявки</b><span>'+norm(q('expectedPlate').value)+'</span></div>'+
+  '<div class="statusItem"><b>Результат</b><span>'+(reasons.length?'ручная проверка: '+reasons.join('; '):'первичный автопроход')+'</span></div>';
+}
+
+q('startBtn').onclick=async()=>{
+ var vin=norm(q('expectedVin').value),plate=norm(q('expectedPlate').value);
+ if(vin.length!==17){q('bootInfo').className='note red';q('bootInfo').textContent='Введите VIN из 17 символов.';return}
+ if(plate.length<6){q('bootInfo').className='note red';q('bootInfo').textContent='Введите ГРНЗ из заявки.';return}
+ go(1);await openCamera('video','car');setAngle();q('captureBtn').disabled=false;liveMonitor();
+};
+q('captureBtn').onclick=captureAngle;
+q('restartCamBtn').onclick=async()=>{await openCamera('video','car');liveMonitor()};
+q('docCaptureBtn').onclick=captureDoc;
+q('docsNext').onclick=()=>{renderFinal();go(3)};
+q('restartBtn').onclick=()=>location.reload();
+
+init();
+})();
+</script>
+</body>
+</html>
