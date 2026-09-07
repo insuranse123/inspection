@@ -8,6 +8,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
@@ -59,9 +60,12 @@ canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:n
       <p class="copy">В боевой системе эти данные приходят с сайта / 1С / ЛКК автоматически. Для теста введите их вручную.</p>
       <div class="field"><label>VIN из заявки</label><input id="expectedVin" maxlength="17" placeholder="17 символов"></div>
       <div class="field"><label>ГРНЗ из заявки</label><input id="expectedPlate" placeholder="Например 094MAX02"></div>
+      <div class="field"><label>Марка</label><input id="expectedMake" placeholder="Например HYUNDAI"></div>
+      <div class="field"><label>Модель</label><input id="expectedModel" placeholder="Например GRANDEUR"></div>
+      <div class="field"><label>Год выпуска</label><input id="expectedYear" inputmode="numeric" maxlength="4" placeholder="Например 2013"></div>
       <div class="field"><label>Пробег из заявки, км (если известен)</label><input id="expectedOdo" inputmode="numeric" placeholder="Например 215000"></div>
       <div id="bootInfo" class="note">Подготовка сервиса…</div>
-      <div class="note amber"><b>Контроль частей ТС:</b> система проверяет наличие автомобиля и ожидаемые зоны/ориентиры. Неуверенный результат не приводит к автоматическому отказу и направляется специалисту.</div>
+      <div class="note amber"><b>Важно:</b> кадр принимается только после проверки требуемого объекта. Если данные не читаются или не совпадают, сервис покажет конкретную причину и попросит переснять либо направит материал специалисту.</div>
       <div class="actions"><button id="startBtn" class="btn primary" disabled>Подготовка сервиса…</button></div>
     </div>
   </section>
@@ -80,7 +84,7 @@ canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:n
       <div class="metrics">
         <div id="mVehicle" class="metric"><b>Автомобиль</b><span>—</span></div>
         <div id="mArea" class="metric"><b>Положение</b><span>—</span></div>
-        <div id="mLive" class="metric"><b>Live / экран</b><span>—</span></div>
+        <div id="mLive" class="metric"><b>Живая съемка</b><span>проверяется</span></div>
         <div id="mQuality" class="metric"><b>Качество</b><span>—</span></div>
       </div>
       <div id="partHint" class="note"><b>Ожидаемые ориентиры:</b> система проверит ракурс и даст сигнал, если детали/зоны не соответствуют ожидаемой стороне.</div>
@@ -94,7 +98,7 @@ canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:n
   <section class="step" data-step="2">
     <div class="card">
       <h2>Документы и идентификация</h2>
-      <p class="copy">Каждый контрольный объект снимается live-камерой. OCR сравнивает найденные данные с заявкой.</p>
+      <p class="copy">Сервис принимает кадр только если распознал именно тот объект, который сейчас запрошен. Данные документа и автомобиля сверяются с заявкой.</p>
       <div id="docTasks" class="taskList"></div>
       <div class="cameraWrap">
         <video id="docVideo" playsinline autoplay muted></video>
@@ -103,7 +107,7 @@ canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:n
         <div id="docChallenge" class="challenge">Выберите контрольный объект выше</div>
         <div id="docStatus" class="camStatus">Ожидание задания…</div>
       </div>
-      <div id="ocrBox" class="ocr">OCR: —</div>
+      <div id="ocrBox" class="ocr">Результат проверки появится здесь</div>
       <div class="actions"><button id="docCaptureBtn" class="btn primary" disabled>Снять и сверить</button><button id="docsNext" class="btn" disabled>Далее</button></div>
     </div>
   </section>
@@ -125,7 +129,7 @@ canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:n
 (function(){
 'use strict';
 
-var detector=null, stream=null, docStream=null, current=0, currentDoc=null;
+var detector=null, semanticModel=null, stream=null, docStream=null, current=0, currentDoc=null;
 var angles=[
  {name:'Передняя левая · 45°', expected:'передняя часть + левая боковая часть', parts:['фара','передний бампер','переднее колесо','зеркало']},
  {name:'Передняя правая · 45°', expected:'передняя часть + правая боковая часть', parts:['фара','передний бампер','переднее колесо','зеркало']},
@@ -133,15 +137,15 @@ var angles=[
  {name:'Задняя левая · 45°', expected:'задняя часть + левая боковая часть', parts:['задний фонарь','задний бампер','заднее колесо']}
 ];
 var docDefs=[
- {id:'srtsFront',title:'СРТС · лицевая сторона',mode:'doc',required:true},
- {id:'srtsBack',title:'СРТС · обратная сторона',mode:'doc',required:true},
- {id:'vin',title:'VIN на автомобиле',mode:'vin',required:true},
- {id:'plate',title:'ГРНЗ на автомобиле',mode:'plate',required:true},
- {id:'odo',title:'Одометр',mode:'odo',required:true},
- {id:'salon',title:'Салон / мультимедиа',mode:'plain',required:true},
- {id:'trunk',title:'Багажник / допоборудование',mode:'plain',required:true}
+ {id:'srtsFront',title:'СРТС · лицевая сторона',mode:'srts',required:true,help:'Покажите карточку СРТС целиком. Все 4 края должны быть видны, без бликов.'},
+ {id:'srtsBack',title:'СРТС · обратная сторона',mode:'srts',required:true,help:'Переверните то же СРТС. Покажите карточку целиком.'},
+ {id:'vin',title:'VIN на автомобиле',mode:'vin',required:true,help:'Наведите камеру непосредственно на VIN автомобиля. 17 символов должны быть резкими и занимать большую часть кадра.'},
+ {id:'plate',title:'ГРНЗ на автомобиле',mode:'plate',required:true,help:'Снимите государственный номер непосредственно на автомобиле. Номер должен читаться полностью.'},
+ {id:'odo',title:'Одометр',mode:'odo',required:true,help:'Покажите приборную панель и значение общего пробега. Не снимайте только отдельные цифры.'},
+ {id:'salon',title:'Салон',mode:'salon',required:true,help:'Покажите руль, переднюю панель и передние сиденья одним кадром.'},
+ {id:'trunk',title:'Багажник / допоборудование',mode:'trunk',required:true,help:'Откройте багажник и покажите внутреннее пространство и края проема.'}
 ];
-var results=[], docs={}, reasons=[], liveHistory=[];
+var results=[], docs={}, reasons=[], liveHistory=[], docAttempts={};
 
 var q=id=>document.getElementById(id);
 var qa=s=>Array.prototype.slice.call(document.querySelectorAll(s));
@@ -153,12 +157,14 @@ function metric(id,cls,b,t){var e=q(id);e.className='metric '+(cls||'');e.queryS
 async function init(){
  try{
   detector=await cocoSsd.load({base:'lite_mobilenet_v2'});
+  try{ semanticModel=await mobilenet.load({version:2,alpha:.5}); }catch(e){ semanticModel=null; }
   q('serviceBadge').textContent='Сервис готов';q('serviceBadge').className='badge ok';
-  q('bootInfo').className='note green';q('bootInfo').innerHTML='<b>Сервис готов.</b> Распознавание документов загрузится при первом документе.';
+  q('bootInfo').className='note green';
+  q('bootInfo').innerHTML='<b>Сервис готов.</b> Для каждого этапа действует отдельная проверка объекта.';
   q('startBtn').disabled=false;q('startBtn').textContent='Начать осмотр';
  }catch(e){
   q('serviceBadge').textContent='Ошибка сервиса';q('serviceBadge').className='badge bad';
-  q('bootInfo').className='note red';q('bootInfo').textContent='Не удалось загрузить модель: '+e;
+  q('bootInfo').className='note red';q('bootInfo').textContent='Не удалось подготовить сервис: '+e;
  }
 }
 
@@ -185,13 +191,24 @@ function hash(c){
 }
 function dist(a,b){var n=0;for(var i=0;i<a.length;i++)if(a[i]!==b[i])n++;return n/a.length}
 
+async function analyzeScene(c){
+ var p=await detector.detect(c,20,.25);
+ var screens=p.filter(x=>['tv','laptop','cell phone'].includes(x.class)&&x.score>.32)
+              .sort((a,b)=>b.score-a.score);
+ var vehicles=p.filter(x=>['car','truck','bus','motorcycle'].includes(x.class))
+               .sort((a,b)=>b.score-a.score);
+ return {predictions:p,screens:screens,vehicles:vehicles};
+}
 async function detectVehicle(c){
- var p=await detector.detect(c,10,.35),v=p.filter(x=>['car','truck','bus','motorcycle'].includes(x.class)).sort((a,b)=>b.score-a.score);
- if(!v.length)return {ok:false,reason:'Автомобиль не распознан'};
+ var scene=await analyzeScene(c),v=scene.vehicles;
+ if(scene.screens.length){
+   return {ok:false,screen:true,reason:'В кадре обнаружен экран или электронное устройство. Снимайте автомобиль напрямую, а не изображение на мониторе/телефоне.',scene:scene};
+ }
+ if(!v.length)return {ok:false,reason:'Автомобиль не распознан. Наведите камеру непосредственно на автомобиль.',scene:scene};
  var m=v[0],b=m.bbox,area=b[2]*b[3]/(c.width*c.height),cx=(b[0]+b[2]/2)/c.width,cy=(b[1]+b[3]/2)/c.height;
- if(v.length>1&&v[1].score>.52)return {ok:false,reason:'В кадре несколько автомобилей'};
- if(m.score<.5)return {ok:false,reason:'Низкая уверенность распознавания'};
- return {ok:true,main:m,area,cx,cy};
+ if(v.length>1&&v[1].score>.52)return {ok:false,reason:'В кадре несколько автомобилей. Оставьте в кадре только страхуемый автомобиль.',scene:scene};
+ if(m.score<.5)return {ok:false,reason:'Не удалось уверенно распознать автомобиль. Измените ракурс или освещение.',scene:scene};
+ return {ok:true,main:m,area,cx,cy,scene:scene};
 }
 function instruction(d){
  if(!d.ok)return d.reason;
@@ -203,16 +220,30 @@ function instruction(d){
  if(d.cy>.68)return 'Поднимите телефон немного выше';
  return 'Положение подходит. Выполните live-задание и снимайте.';
 }
+function cropBBox(c,b){
+ var pad=.04, x=Math.max(0,b[0]-c.width*pad),y=Math.max(0,b[1]-c.height*pad);
+ var w=Math.min(c.width-x,b[2]+c.width*pad*2),h=Math.min(c.height-y,b[3]+c.height*pad*2);
+ var o=document.createElement('canvas');o.width=160;o.height=120;
+ o.getContext('2d').drawImage(c,x,y,w,h,0,0,160,120);return o;
+}
 function screenSuspicion(frames,dets){
- var hs=frames.map(hash),motion=0;for(var i=1;i<hs.length;i++)motion+=dist(hs[i-1],hs[i]);motion/=(hs.length-1);
- var areas=dets.filter(x=>x.ok).map(x=>x.area),areaVar=0;
- if(areas.length>1){var av=areas.reduce((a,b)=>a+b,0)/areas.length;areaVar=Math.sqrt(areas.reduce((s,x)=>s+(x-av)*(x-av),0)/areas.length)}
- var score=0;
- if(motion<.018)score+=55;
- if(areaVar<.004)score+=25;
- var light=luminance(frames[Math.floor(frames.length/2)]);
- if(light>235||light<25)score+=10;
- return {motion,areaVar,score:Math.min(100,score)};
+ var globalHashes=frames.map(hash),globalMotion=0;
+ for(var i=1;i<globalHashes.length;i++)globalMotion+=dist(globalHashes[i-1],globalHashes[i]);
+ globalMotion/=(globalHashes.length-1);
+
+ var deviceHit=dets.some(d=>d.scene&&d.scene.screens&&d.scene.screens.length);
+ var objectHashes=[];
+ for(var j=0;j<frames.length;j++){
+   if(dets[j]&&dets[j].ok)objectHashes.push(hash(cropBBox(frames[j],dets[j].main.bbox)));
+ }
+ var objectChange=0;
+ for(var k=1;k<objectHashes.length;k++)objectChange+=dist(objectHashes[k-1],objectHashes[k]);
+ if(objectHashes.length>1)objectChange/=(objectHashes.length-1);
+
+ var tooStatic=globalMotion<.018;
+ var planar=globalMotion>.025 && objectHashes.length>4 && objectChange<.020;
+ return {deviceHit:deviceHit,tooStatic:tooStatic,planar:planar,globalMotion:globalMotion,objectChange:objectChange,
+         suspicious:deviceHit||tooStatic||planar};
 }
 
 async function liveMonitor(){
@@ -221,9 +252,14 @@ async function liveMonitor(){
   var c=grab(q('video')),d=await detectVehicle(c),txt=instruction(d);
   q('camStatus').className='camStatus '+(d.ok?'ok':'bad');q('camStatus').textContent=txt;
   if(d.ok){
-   metric('mVehicle','ok','Автомобиль',Math.round(d.main.score*100)+'%');
-   metric('mArea',(d.area>.16&&d.area<.82)?'ok':'warn','Положение',Math.round(d.area*100)+'% кадра');
-  }else metric('mVehicle','bad','Автомобиль','не найден');
+   metric('mVehicle','ok','Автомобиль','распознан');
+   metric('mArea',(d.area>.16&&d.area<.82)?'ok':'warn','Положение',
+          d.area<.16?'подойдите ближе':d.area>.82?'отойдите дальше':'подходит');
+   metric('mLive','warn','Живая съемка','проверяется при снимке');
+  }else{
+   metric('mVehicle','bad','Автомобиль',d.screen?'обнаружен экран':'не подтвержден');
+   if(d.screen)metric('mLive','bad','Живая съемка','съемка с экрана запрещена');
+  }
  }catch(e){}
  setTimeout(liveMonitor,700);
 }
@@ -246,12 +282,29 @@ async function captureAngle(){
  var mid=good[Math.floor(good.length/2)],ins=instruction(mid);
  if(ins.indexOf('подходит')<0){q('camStatus').className='camStatus bad';q('camStatus').textContent=ins;q('captureBtn').disabled=false;return}
  var live=screenSuspicion(frames,dets),light=luminance(frames[3]);
- metric('mLive',live.score<50?'ok':'bad','Live / экран','риск '+live.score+'/100');
- metric('mQuality',(light>38&&light<220)?'ok':'bad','Качество','свет '+light.toFixed(0));
- if(live.score>=50){q('camStatus').className='camStatus bad';q('camStatus').textContent='Признаки слишком статичной сцены / возможной пересъемки экрана. Выполните движение отчетливее.';addReason('Антиспуфинг: подозрение на статичное изображение, ракурс '+(current+1));q('captureBtn').disabled=false;return}
+ metric('mQuality',(light>38&&light<220)?'ok':'bad','Качество',light>38&&light<220?'подходит':'нужно переснять');
+ if(live.deviceHit){
+   metric('mLive','bad','Живая съемка','обнаружен экран');
+   q('camStatus').className='camStatus bad';
+   q('camStatus').textContent='Обнаружен монитор, ноутбук или телефон. Снимайте настоящий автомобиль непосредственно камерой.';
+   q('captureBtn').disabled=false;return;
+ }
+ if(live.tooStatic){
+   metric('mLive','bad','Живая съемка','не подтверждена');
+   q('camStatus').className='camStatus bad';
+   q('camStatus').textContent='Не удалось подтвердить живую съемку. Выполните указанное движение камерой и повторите.';
+   q('captureBtn').disabled=false;return;
+ }
+ if(live.planar){
+   metric('mLive','bad','Живая съемка','нужна повторная проверка');
+   q('camStatus').className='camStatus bad';
+   q('camStatus').textContent='Сцена похожа на плоское изображение. Сделайте шаг в сторону так, чтобы изменилась перспектива автомобиля.';
+   q('captureBtn').disabled=false;return;
+ }
+ metric('mLive','ok','Живая съемка','подтверждена');
  if(light<=38||light>=220){q('camStatus').className='camStatus bad';q('camStatus').textContent=light<=38?'Слишком темно. Перейдите на свет.':'Сильный пересвет. Измените положение.';q('captureBtn').disabled=false;return}
  var shot=frames[3],url=shot.toDataURL('image/jpeg',.85);
- results.push({name:angles[current].name,image:url,score:mid.main.score,area:mid.area,screenRisk:live.score,parts:angles[current].parts});
+ results.push({name:angles[current].name,image:url,score:mid.main.score,area:mid.area,liveConfirmed:true,parts:angles[current].parts});
  q('camStatus').className='camStatus ok';q('camStatus').textContent='✓ Ракурс принят. Автомобиль и live-сессия подтверждены.';
  current++;
  if(current>=4){stream.getTracks().forEach(t=>t.stop());buildDocs();go(2);await startDocs();return}
@@ -270,8 +323,11 @@ async function startDocs(){
 }
 function selectDoc(d){
  currentDoc=d;qa('.task').forEach(x=>x.style.outline='');q('task_'+d.id).style.outline='2px solid #6aa8d0';
- q('docChallenge').textContent='Снимите: '+d.title+'. Держите объект ровно, крупно и без бликов.';
- q('docCaptureBtn').disabled=false;q('ocrBox').textContent='OCR: ожидается снимок';
+ q('docChallenge').textContent=d.title+': '+d.help;
+ q('docCaptureBtn').disabled=false;
+ q('ocrBox').innerHTML='<b>Сейчас проверяется:</b> '+d.title+'<br>'+d.help;
+ q('docStatus').className='camStatus';
+ q('docStatus').textContent='Наведите камеру на требуемый объект.';
 }
 function cropCanvas(c,x,y,w,h){
  var out=document.createElement('canvas');
@@ -343,61 +399,197 @@ async function readSrtsFields(c){
    debug:{plateText:plateO.text,vinText:vinO.text,modelText:modelO.text}
  };
 }
+
+function levenshtein(a,b){
+ a=norm(a);b=norm(b);var m=a.length,n=b.length,d=Array.from({length:m+1},()=>Array(n+1).fill(0));
+ for(var i=0;i<=m;i++)d[i][0]=i;for(var j=0;j<=n;j++)d[0][j]=j;
+ for(i=1;i<=m;i++)for(j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+ return d[m][n];
+}
+async function semanticClasses(c){
+ if(!semanticModel)return [];
+ try{return await semanticModel.classify(c,8)}catch(e){return []}
+}
+function classText(arr){return arr.map(x=>x.className.toLowerCase()).join(' | ')}
+function semanticHas(arr,words){
+ var t=classText(arr);return words.some(w=>t.indexOf(w)>=0);
+}
+async function screenCheckForDoc(video){
+ var frames=[], analyses=[];
+ for(var i=0;i<4;i++){var c=grab(video);frames.push(c);analyses.push(await analyzeScene(c));await new Promise(r=>setTimeout(r,160))}
+ var hit=analyses.some(a=>a.screens&&a.screens.length);
+ return {hit:hit,frame:frames[2]};
+}
+async function readSrtsSmart(c){
+ var full=await ocrCanvas(preprocessCanvas(c,1.7));
+ var txt=full.text||'',clean=norm(txt);
+ var plate=extract(txt,'plate');
+ var vin=extract(txt,'vin');
+ var markers=['KAZAKHSTAN','REPUBLIC','CERTIFICAT','IMMATRICULATION','VEHICLE','KZ'];
+ var markerHits=markers.filter(x=>clean.indexOf(x)>=0);
+ var years=(txt.match(/\b(19|20)\d{2}\b/g)||[]);
+ var expMake=norm(q('expectedMake').value),expModel=norm(q('expectedModel').value);
+ return {
+  recognized:markerHits.length>=2 || (!!vin && vin.length===17) || !!plate,
+  text:txt,confidence:full.confidence||0,plate:plate,vin:vin,years:years,
+  makeMatch:!expMake||clean.indexOf(expMake)>=0,
+  modelMatch:!expModel||clean.indexOf(expModel)>=0,
+  markerHits:markerHits
+ };
+}
+function taskFail(message,technical){
+ docAttempts[currentDoc.id]=(docAttempts[currentDoc.id]||0)+1;
+ q('docStatus').className='camStatus bad';q('docStatus').textContent=message;
+ q('ocrBox').innerHTML='<b>Кадр не принят.</b><br>'+message+(technical?'<br><span style="opacity:.7">'+technical+'</span>':'');
+ q('docCaptureBtn').disabled=false;
+}
+function taskReview(message,data){
+ docs[currentDoc.id]=data||{match:false};
+ addReason(currentDoc.title+': '+message);
+ var task=q('task_'+currentDoc.id);task.className='task review';task.querySelector('span').textContent='⚠ '+message;
+ q('docStatus').className='camStatus warn';q('docStatus').textContent=message;
+ q('docCaptureBtn').disabled=false;q('docsNext').disabled=docDefs.some(d=>!docs[d.id]);
+}
+
 async function captureDoc(){
  if(!currentDoc)return;
- q('docCaptureBtn').disabled=true;q('docStatus').className='camStatus warn';q('docStatus').textContent='Проверяем…';
- var c=grab(q('docVideo')),light=luminance(c);
- if(light<35||light>225){q('docStatus').className='camStatus bad';q('docStatus').textContent='Проблема с освещением. Переснимите.';q('docCaptureBtn').disabled=false;return}
- var o={text:'',confidence:0},found='',match=true,srts=null;
- if(currentDoc.mode==='vin'){
-   o=await ocrCanvas(preprocessCanvas(c,2.2),'ABCDEFGHJKLMNPRSTUVWXYZ0123456789');
-   found=extract(o.text,'vin');
-   match=!!found && found===norm(q('expectedVin').value);
+ q('docCaptureBtn').disabled=true;
+ q('docStatus').className='camStatus warn';q('docStatus').textContent='Проверяем именно: '+currentDoc.title+'…';
+
+ var sc=await screenCheckForDoc(q('docVideo'));
+ if(sc.hit){
+   taskFail('Обнаружен экран/телефон/ноутбук. Покажите оригинальный объект непосредственно перед камерой.');
+   return;
  }
- if(currentDoc.mode==='plate'){
-   o=await ocrCanvas(preprocessCanvas(c,2.2),'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
-   found=extract(o.text,'plate');
-   match=!!found && found===norm(q('expectedPlate').value);
+ var c=sc.frame,light=luminance(c);
+ if(light<35){taskFail('Слишком темно. Добавьте освещение и повторите.');return}
+ if(light>225){taskFail('Сильный блик или пересвет. Наклоните объект и повторите.');return}
+
+ var url=c.toDataURL('image/jpeg',.82),task=q('task_'+currentDoc.id);
+ var expectedVin=norm(q('expectedVin').value),expectedPlate=norm(q('expectedPlate').value);
+ var expectedYear=(q('expectedYear').value||'').replace(/\D/g,'');
+ var found='',message='',data={image:url,match:false};
+
+ if(currentDoc.mode==='srts'){
+   var s=await readSrtsSmart(c);data.srts=s;
+   if(!s.recognized){
+     taskFail('Не удалось подтвердить, что в кадре СРТС. Покажите карточку целиком, ровно и без бликов.');
+     return;
+   }
+   var lines=['Документ распознан как СРТС.'];
+   var mismatch=[];
+   if(s.vin){
+     lines.push('VIN: '+s.vin);
+     if(expectedVin && s.vin!==expectedVin)mismatch.push('VIN в СРТС '+s.vin+' не совпадает с VIN заявки '+expectedVin);
+     else if(expectedVin)lines.push('VIN совпадает с заявкой.');
+   }else lines.push('VIN на этой стороне не прочитан.');
+
+   if(s.plate){
+     lines.push('ГРНЗ: '+s.plate);
+     if(expectedPlate && s.plate!==expectedPlate)mismatch.push('ГРНЗ в СРТС '+s.plate+' не совпадает с ГРНЗ заявки '+expectedPlate);
+     else if(expectedPlate)lines.push('ГРНЗ совпадает с заявкой.');
+   }else lines.push('ГРНЗ на этой стороне не прочитан.');
+
+   if(!s.makeMatch)mismatch.push('Марка в документе не подтверждает марку из заявки.');
+   if(!s.modelMatch)mismatch.push('Модель в документе не подтверждает модель из заявки.');
+   if(expectedYear && s.years.length && s.years.indexOf(expectedYear)<0)mismatch.push('Год выпуска из заявки '+expectedYear+' не найден в документе.');
+
+   data.match=mismatch.length===0;
+   docs[currentDoc.id]=data;
+   if(mismatch.length){
+     mismatch.forEach(x=>addReason(x));
+     task.className='task review';task.querySelector('span').textContent='⚠ Обнаружено несоответствие';
+     q('docStatus').className='camStatus warn';q('docStatus').textContent=mismatch[0];
+     q('ocrBox').innerHTML='<b>СРТС распознано.</b><br>'+lines.join('<br>')+'<br><br><b>Требуется проверка:</b><br>'+mismatch.join('<br>');
+   }else{
+     task.className='task done';task.querySelector('span').textContent='✓ СРТС распознано';
+     q('docStatus').className='camStatus ok';q('docStatus').textContent='✓ СРТС распознано. Найденные реквизиты не противоречат заявке.';
+     q('ocrBox').innerHTML='<b>СРТС распознано.</b><br>'+lines.join('<br>');
+   }
  }
- if(currentDoc.mode==='odo'){
-   o=await ocrCanvas(preprocessCanvas(c,2.0),'0123456789');
-   found=extract(o.text,'odo');
-   var e=q('expectedOdo').value.replace(/\D/g,'');
-   match=!e||(!isNaN(+found)&&Math.abs(+found-+e)<=1000);
+ else if(currentDoc.mode==='vin'){
+   var vo=await ocrCanvas(preprocessCanvas(c,2.4),'ABCDEFGHJKLMNPRSTUVWXYZ0123456789');
+   found=extract(vo.text,'vin');
+   if(!found){taskFail('VIN не распознан. Приблизьте VIN так, чтобы все 17 символов были резкими и полностью видны.');return}
+   data.found=found;data.match=found===expectedVin;docs[currentDoc.id]=data;
+   if(data.match){
+     task.className='task done';task.querySelector('span').textContent='✓ VIN '+found+' совпадает';
+     q('docStatus').className='camStatus ok';q('docStatus').textContent='✓ VIN автомобиля совпадает с заявкой.';
+     q('ocrBox').innerHTML='<b>VIN автомобиля:</b> '+found+'<br><b>VIN заявки:</b> '+expectedVin+'<br><b>Результат:</b> совпадает.';
+   }else{
+     var near=levenshtein(found,expectedVin)<=1;
+     message='VIN автомобиля '+found+' не совпадает с VIN заявки '+expectedVin+'.';
+     addReason(message);task.className='task review';task.querySelector('span').textContent='⚠ VIN не совпадает';
+     q('docStatus').className='camStatus warn';q('docStatus').textContent=message;
+     q('ocrBox').innerHTML='<b>Обнаружено несоответствие.</b><br>'+message+(near?'<br>Возможно ошибка чтения одного символа — требуется повторный снимок/проверка.':'');
+   }
  }
- if(currentDoc.mode==='doc'){
-   srts=await readSrtsFields(c);
-   var ev=norm(q('expectedVin').value),ep=norm(q('expectedPlate').value);
-   var vinMatch=!!srts.vin && srts.vin===ev;
-   var plateMatch=!!srts.plate && srts.plate===ep;
-   match=vinMatch||plateMatch;
-   found='VIN: '+(srts.vin||'не найден')+' | ГРНЗ: '+(srts.plate||'не найден');
-   o.text='VIN zone: '+srts.debug.vinText+' | PLATE zone: '+srts.debug.plateText+' | MODEL zone: '+srts.debug.modelText;
-   o.confidence=match?85:35;
+ else if(currentDoc.mode==='plate'){
+   var po=await ocrCanvas(preprocessCanvas(c,2.4),'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+   found=extract(po.text,'plate');
+   if(!found){taskFail('ГРНЗ не распознан. Снимите номер крупнее, строго спереди и без бликов.');return}
+   data.found=found;data.match=found===expectedPlate;docs[currentDoc.id]=data;
+   if(data.match){
+     task.className='task done';task.querySelector('span').textContent='✓ ГРНЗ '+found+' совпадает';
+     q('docStatus').className='camStatus ok';q('docStatus').textContent='✓ Государственный номер совпадает с заявкой.';
+     q('ocrBox').innerHTML='<b>ГРНЗ автомобиля:</b> '+found+'<br><b>ГРНЗ заявки:</b> '+expectedPlate+'<br><b>Результат:</b> совпадает.';
+   }else{
+     message='ГРНЗ автомобиля '+found+' не совпадает с ГРНЗ заявки '+expectedPlate+'.';
+     addReason(message);task.className='task review';task.querySelector('span').textContent='⚠ ГРНЗ не совпадает';
+     q('docStatus').className='camStatus warn';q('docStatus').textContent=message;
+     q('ocrBox').innerHTML='<b>Обнаружено несоответствие.</b><br>'+message;
+   }
  }
- var url=c.toDataURL('image/jpeg',.82);
- docs[currentDoc.id]={image:url,text:o.text,found,match,confidence:o.confidence,srts:srts};
- var task=q('task_'+currentDoc.id);
- if(match){task.className='task done';task.querySelector('span').textContent='✓ Принято'+(found?' · '+found:'');q('docStatus').className='camStatus ok';q('docStatus').textContent='✓ Сверка пройдена.'}
- else{task.className='task review';task.querySelector('span').textContent='⚠ Требуется проверка'+(found?' · '+found:'');q('docStatus').className='camStatus warn';q('docStatus').textContent='Данные не подтверждены автоматически. Кейс будет отмечен для специалиста.';addReason(currentDoc.title+': автоматическая сверка не пройдена')}
- if(currentDoc.mode==='doc' && srts){
-   q('ocrBox').innerHTML=
-     '<b>Распознано по зонам СРТС:</b><br>'+
-     'ГРНЗ: '+(srts.plate||'не найден')+'<br>'+
-     'VIN: '+(srts.vin||'не найден')+'<br>'+
-     'Марка/модель: '+(srts.modelText||'не распознано')+'<br><br>'+
-     '<span style="opacity:.7">Сверка с заявкой: '+(match?'СОВПАДЕНИЕ':'ТРЕБУЕТ ПРОВЕРКИ')+'</span>';
- }else{
-   q('ocrBox').textContent='OCR ('+Math.round(o.confidence)+'%): '+(o.text||'нет уверенного текста');
+ else if(currentDoc.mode==='odo'){
+   var sem=await semanticClasses(c),semText=classText(sem);
+   var oo=await ocrCanvas(preprocessCanvas(c,2.0),'0123456789');
+   found=extract(oo.text,'odo');
+   var looksLikeOdo=semanticHas(sem,['speedometer','odometer','dashboard','dial','digital clock','meter']);
+   if(!looksLikeOdo){
+     taskFail('Не удалось подтвердить, что в кадре одометр. Покажите всю приборную панель вместе со значением общего пробега.');
+     return;
+   }
+   if(!found){taskFail('Приборная панель распознана, но значение пробега не читается. Приблизьте камеру и уберите блики.');return}
+   var eo=(q('expectedOdo').value||'').replace(/\D/g,'');
+   data.found=found;data.match=!eo||Math.abs(+found-+eo)<=1000;docs[currentDoc.id]=data;
+   task.className=data.match?'task done':'task review';
+   task.querySelector('span').textContent=data.match?'✓ Одометр '+found+' км':'⚠ Пробег требует проверки';
+   q('docStatus').className=data.match?'camStatus ok':'camStatus warn';
+   q('docStatus').textContent=data.match?'✓ Одометр распознан: '+found+' км.':'Пробег '+found+' км отличается от данных заявки.';
+   q('ocrBox').innerHTML='<b>Объект:</b> приборная панель / одометр<br><b>Распознанный пробег:</b> '+found+' км'+(eo?'<br><b>В заявке:</b> '+eo+' км':'');
+   if(!data.match)addReason('Пробег автомобиля отличается от данных заявки.');
  }
+ else if(currentDoc.mode==='salon'){
+   var ss=await semanticClasses(c);
+   var interior=semanticHas(ss,['seat belt','steering wheel','dashboard','car mirror','bucket seat','seat']);
+   if(!interior){
+     taskFail('Не удалось распознать салон автомобиля. Покажите руль, переднюю панель и передние сиденья одним кадром.');
+     return;
+   }
+   data.match=true;docs[currentDoc.id]=data;task.className='task done';task.querySelector('span').textContent='✓ Салон распознан';
+   q('docStatus').className='camStatus ok';q('docStatus').textContent='✓ Салон автомобиля распознан.';
+   q('ocrBox').innerHTML='<b>Объект:</b> салон автомобиля<br><b>Результат:</b> принят.';
+ }
+ else if(currentDoc.mode==='trunk'){
+   var ts=await semanticClasses(c);
+   var unrelated=semanticHas(ts,['computer keyboard','laptop','television','monitor','desktop computer']);
+   if(unrelated){taskFail('Вместо багажника распознан посторонний объект/экран. Откройте багажник автомобиля и снимите его непосредственно.');return}
+   // Generic ImageNet is weak for trunks: accept material but explicitly route uncertainty.
+   data.match=false;data.manual=true;docs[currentDoc.id]=data;
+   task.className='task review';task.querySelector('span').textContent='⚠ Багажник: контроль специалистом';
+   q('docStatus').className='camStatus warn';q('docStatus').textContent='Снимок багажника получен. Автоматическая идентификация недостаточно уверенная — материал будет проверен специалистом.';
+   q('ocrBox').innerHTML='<b>Объект:</b> багажник / дополнительное оборудование<br><b>Результат:</b> снимок принят для контрольной проверки.';
+   addReason('Багажник / дополнительное оборудование: требуется контроль специалистом.');
+ }
+
  q('docCaptureBtn').disabled=false;
  q('docsNext').disabled=docDefs.some(d=>!docs[d.id]);
 }
 function renderFinal(){
  if(docStream)docStream.getTracks().forEach(t=>t.stop());
- var html=reasons.length?'<div class="final review"><b>⚠ Передать специалисту / на видеоосмотр.</b><br>Есть сигналы, которые нельзя подтверждать автоматически.</div>':'<div class="final ok"><b>✓ Первичный автоматический контроль пройден.</b><br>Ракурсы, live-сессия и обязательные контрольные материалы получены.</div>';
+ var html=reasons.length?'<div class="final review"><b>⚠ Требуется дополнительная проверка.</b><br>'+reasons.join('<br>')+'</div>':'<div class="final ok"><b>✓ Проверка пройдена.</b><br>Обязательные ракурсы, идентификаторы и документы подтверждены.</div>';
  q('summary').innerHTML=html;
- var tb=q('thumbs');tb.innerHTML='';results.forEach(r=>{var d=document.createElement('div');d.className='thumb';d.innerHTML='<img src="'+r.image+'"><div><b>'+r.name+'</b><br>авто '+Math.round(r.score*100)+'% · экран-риск '+r.screenRisk+'/100<br>ориентиры: '+r.parts.join(', ')+'</div>';tb.appendChild(d)});
+ var tb=q('thumbs');tb.innerHTML='';results.forEach(r=>{var d=document.createElement('div');d.className='thumb';d.innerHTML='<img src="'+r.image+'"><div><b>'+r.name+'</b><br>Автомобиль распознан · живая съемка подтверждена<br>Требуемые зоны: '+r.parts.join(', ')+'</div>';tb.appendChild(d)});
  q('statusList').innerHTML=
   '<div class="statusItem"><b>Ракурсы ТС</b><span>'+results.length+'/4</span></div>'+
   '<div class="statusItem"><b>Контрольные материалы</b><span>'+Object.keys(docs).length+'/'+docDefs.length+'</span></div>'+
