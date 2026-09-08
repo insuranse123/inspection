@@ -42,6 +42,20 @@ canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:n
 .final{margin-top:10px;padding:12px;border-radius:14px;font-size:11px;line-height:1.5}.final.ok{background:#eaf8f1;border:1px solid #c8e6d7;color:#257158}.final.review{background:#fff8e9;border:1px solid #ead5a0;color:#8b671d}
 .statusList{display:grid;gap:7px;margin-top:10px}.statusItem{padding:9px 10px;border-radius:12px;border:1px solid #d8e5eb;background:#f7fafb}.statusItem b{display:block;font-size:9px;color:#315a79}.statusItem span{display:block;font-size:8px;color:#718691;margin-top:3px}
 .footer{margin-top:15px;text-align:center;color:#8597a0;font-size:8.5px;line-height:1.45}
+
+.choiceRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.choice{min-height:44px;border:1px solid #cfdee6;border-radius:12px;background:#f8fbfc;color:#315d7e;font-weight:800}
+.choice.active{background:#e9f7f0;border-color:#bcdccc;color:#237156}
+.choice.active.no{background:#eef5fb;border-color:#cbdde9;color:#315d7e}
+.formGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+.formGrid .full{grid-column:1/-1}
+select,textarea{width:100%;padding:11px;border:1px solid #cfdee6;border-radius:12px;background:#fff;color:#244b67;font:inherit}
+textarea{min-height:72px;resize:vertical}
+.captureCard{margin-top:10px;border:1px solid #d7e5ec;border-radius:14px;padding:10px;background:#fbfdfe}
+.captureCard img{width:100%;border-radius:11px;display:block;margin-top:8px}
+.miniList{display:grid;gap:7px;margin-top:9px}
+.miniItem{padding:9px;border:1px solid #d8e5eb;border-radius:11px;background:#f7fafb;font-size:9px;line-height:1.45;color:#607985}
+.internal{margin-top:8px;padding:9px;border-radius:11px;background:#f5f9fb;border:1px dashed #cfdfe7;font-size:8.5px;color:#6c8290;line-height:1.45}
 </style>
 </head>
 <body>
@@ -114,10 +128,82 @@ canvas.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:n
 
   <section class="step" data-step="3">
     <div class="card">
+      <h2>Повреждения и дополнительное оборудование</h2>
+      <p class="copy">Укажите фактическое состояние автомобиля. Если есть повреждения или дополнительное оборудование — зафиксируйте их отдельным снимком.</p>
+
+      <div class="captureCard">
+        <h3>Есть видимые повреждения?</h3>
+        <div class="choiceRow">
+          <button id="damageNo" class="choice active no">Нет</button>
+          <button id="damageYes" class="choice">Да</button>
+        </div>
+        <div id="damageForm" style="display:none">
+          <div class="formGrid">
+            <div><label>Элемент</label>
+              <select id="damagePart">
+                <option>Передний бампер</option><option>Задний бампер</option><option>Капот</option>
+                <option>Крышка багажника</option><option>Переднее левое крыло</option><option>Переднее правое крыло</option>
+                <option>Заднее левое крыло</option><option>Заднее правое крыло</option><option>Левая дверь</option>
+                <option>Правая дверь</option><option>Лобовое стекло</option><option>Фара</option><option>Задний фонарь</option>
+                <option>Другое</option>
+              </select>
+            </div>
+            <div><label>Вид повреждения</label>
+              <select id="damageType">
+                <option>Царапина</option><option>Вмятина</option><option>Скол</option><option>Трещина</option>
+                <option>Потертость</option><option>Разрыв / деформация</option><option>Другое</option>
+              </select>
+            </div>
+            <div class="full"><label>Комментарий</label><textarea id="damageComment" placeholder="Например: царапина около 10 см"></textarea></div>
+          </div>
+          <div class="actions"><button id="damageCaptureBtn" class="btn">Снять повреждение</button></div>
+          <div id="damageList" class="miniList"></div>
+        </div>
+      </div>
+
+      <div class="captureCard">
+        <h3>Есть дополнительное оборудование?</h3>
+        <div class="choiceRow">
+          <button id="equipNo" class="choice active no">Нет</button>
+          <button id="equipYes" class="choice">Да</button>
+        </div>
+        <div id="equipForm" style="display:none">
+          <div class="formGrid">
+            <div class="full"><label>Оборудование</label>
+              <select id="equipType">
+                <option>Защитная пленка / покрытие</option><option>Мультимедиа</option><option>Аудиосистема / усилитель</option>
+                <option>Сигнализация</option><option>Фаркоп</option><option>Багажная система / бокс</option>
+                <option>Дополнительное освещение</option><option>Обвес / спойлер</option><option>Другое</option>
+              </select>
+            </div>
+            <div><label>Заявленная стоимость, ₸</label><input id="equipValue" inputmode="numeric" placeholder="Например 850000"></div>
+            <div><label>Состояние</label><select id="equipCondition"><option>Без повреждений</option><option>Есть повреждения</option></select></div>
+            <div class="full"><label>Описание</label><textarea id="equipComment" placeholder="Марка, модель, особенности"></textarea></div>
+          </div>
+          <div class="actions"><button id="equipCaptureBtn" class="btn">Снять оборудование</button></div>
+          <div id="equipList" class="miniList"></div>
+        </div>
+      </div>
+
+      <div class="cameraWrap">
+        <video id="extraVideo" playsinline autoplay muted></video>
+        <canvas id="extraOverlay" class="overlay"></canvas>
+        <div class="guide"></div>
+        <div id="extraChallenge" class="challenge">Камера используется только для выбранного объекта</div>
+        <div id="extraStatus" class="camStatus">Камера будет запущена при необходимости</div>
+      </div>
+
+      <div class="actions"><button id="extraNext" class="btn primary">Завершить осмотр</button></div>
+    </div>
+  </section>
+
+  <section class="step" data-step="4">
+    <div class="card">
       <h2>Итог первичного контроля</h2>
       <div id="summary"></div>
       <div id="thumbs" class="thumbGrid"></div>
       <div id="statusList" class="statusList"></div>
+      <div class="internal"><b>История страховых случаев по VIN:</b> в этом тестовом стенде запрос в ЕСБД не выполняется. Для рабочей версии требуется серверная интеграция Евразии с доступным сервисом ЕСБД.</div>
       <div class="actions"><button id="restartBtn" class="btn">Новый тест</button></div>
     </div>
   </section>
@@ -145,13 +231,13 @@ var docDefs=[
  {id:'salon',title:'Салон',mode:'salon',required:true,help:'Покажите руль, переднюю панель и передние сиденья одним кадром.'},
  {id:'trunk',title:'Багажник / допоборудование',mode:'trunk',required:true,help:'Откройте багажник и покажите внутреннее пространство и края проема.'}
 ];
-var results=[], docs={}, reasons=[], liveHistory=[], docAttempts={};
+var results=[], docs={}, reasons=[], liveHistory=[], docAttempts={}, damages=[], equipment=[], extraStream=null, damageDeclared=false, equipDeclared=false;
 
 var q=id=>document.getElementById(id);
 var qa=s=>Array.prototype.slice.call(document.querySelectorAll(s));
 function norm(s){return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
 function addReason(r){if(reasons.indexOf(r)<0)reasons.push(r)}
-function go(n){qa('.step').forEach(x=>x.classList.toggle('active',Number(x.dataset.step)===n));q('bar').style.width=(n/3*100)+'%';window.scrollTo(0,0)}
+function go(n){qa('.step').forEach(x=>x.classList.toggle('active',Number(x.dataset.step)===n));q('bar').style.width=(n/4*100)+'%';window.scrollTo(0,0)}
 function metric(id,cls,b,t){var e=q(id);e.className='metric '+(cls||'');e.querySelector('b').textContent=b;e.querySelector('span').textContent=t}
 
 async function init(){
@@ -442,7 +528,7 @@ function preprocessCanvas(c,scale){
 }
 async function ocrCanvas(c,whitelist){
  try{
-  var opts={logger:m=>{if(m.status==='recognizing text')q('ocrBox').textContent='OCR '+Math.round((m.progress||0)*100)+'%'}};
+  var opts={logger:m=>{if(m.status==='recognizing text')q('ocrBox').textContent='Распознавание '+Math.round((m.progress||0)*100)+'%'}};
   if(whitelist) opts.tessedit_char_whitelist=whitelist;
   var r=await Tesseract.recognize(c,'eng',opts);
   return {text:(r.data.text||'').toUpperCase().replace(/\s+/g,' ').trim(),confidence:r.data.confidence||0};
@@ -519,17 +605,44 @@ async function screenCheckForDoc(video){
  return {hit:hit,frame:frames[2]};
 }
 async function readSrtsSmart(c){
- var full=await ocrCanvas(preprocessCanvas(c,1.7));
- var txt=full.text||'',clean=norm(txt);
- var plate=extract(txt,'plate');
- var vin=extract(txt,'vin');
- var markers=['KAZAKHSTAN','REPUBLIC','CERTIFICAT','IMMATRICULATION','VEHICLE','KZ'];
- var markerHits=markers.filter(x=>clean.indexOf(x)>=0);
+ var crops=[
+   c,
+   cropCanvas(c,.02,.08,.96,.70),
+   cropCanvas(c,.02,.18,.72,.46),
+   cropCanvas(c,.02,.28,.88,.38)
+ ];
+ var texts=[],confs=[];
+ for(var i=0;i<crops.length;i++){
+   var o=await ocrCanvas(preprocessCanvas(crops[i],i===0?1.6:2.0));
+   texts.push(o.text||'');confs.push(o.confidence||0);
+ }
+ var txt=texts.join(' | '),clean=norm(txt);
+ var expectedVin=norm(q('expectedVin').value), expectedPlate=norm(q('expectedPlate').value);
+
+ function bestExpected(expected,maxDist){
+   if(!expected)return '';
+   var compact=clean;
+   if(compact.indexOf(expected)>=0)return expected;
+   var best='',bestD=999;
+   for(var i=0;i<=compact.length-expected.length;i++){
+     var s=compact.slice(i,i+expected.length),d=levenshtein(s,expected);
+     if(d<bestD){bestD=d;best=s}
+   }
+   return bestD<=maxDist?best:'';
+ }
+ var plate=extract(txt,'plate') || bestExpected(expectedPlate,1);
+ var vin=extract(txt,'vin') || bestExpected(expectedVin,1);
+
+ var markers=['KAZAKHSTAN','REPUBLIC','CERTIFICAT','IMMATRICULATION','VEHICLE','KZ','СРТС','СВИДЕТЕЛЬСТВО'];
+ var markerHits=markers.filter(x=>clean.indexOf(norm(x))>=0);
  var years=(txt.match(/\b(19|20)\d{2}\b/g)||[]);
  var expMake=norm(q('expectedMake').value),expModel=norm(q('expectedModel').value);
+
  return {
-  recognized:markerHits.length>=2 || (!!vin && vin.length===17) || !!plate,
-  text:txt,confidence:full.confidence||0,plate:plate,vin:vin,years:years,
+  recognized:markerHits.length>=1 || (!!vin && vin.length===17) || !!plate || (expMake&&clean.indexOf(expMake)>=0),
+  text:txt,
+  confidence:Math.max.apply(null,confs),
+  plate:plate,vin:vin,years:years,
   makeMatch:!expMake||clean.indexOf(expMake)>=0,
   modelMatch:!expModel||clean.indexOf(expModel)>=0,
   markerHits:markerHits
@@ -683,17 +796,100 @@ async function captureDoc(){
  q('docCaptureBtn').disabled=false;
  q('docsNext').disabled=docDefs.some(d=>!docs[d.id]);
 }
+
+async function ensureExtraCamera(){
+ if(extraStream)return true;
+ try{
+   extraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+   q('extraVideo').srcObject=extraStream;await q('extraVideo').play();
+   q('extraStatus').className='camStatus ok';q('extraStatus').textContent='Камера готова.';
+   return true;
+ }catch(e){
+   q('extraStatus').className='camStatus bad';q('extraStatus').textContent='Нет доступа к камере.';
+   return false;
+ }
+}
+function setChoice(yesId,noId,formId,value,type){
+ q(yesId).className='choice'+(value?' active':'');
+ q(noId).className='choice no'+(!value?' active':'');
+ q(formId).style.display=value?'block':'none';
+ if(type==='damage')damageDeclared=value;else equipDeclared=value;
+ if(value)ensureExtraCamera();
+}
+function renderDamageList(){
+ q('damageList').innerHTML=damages.map((d,i)=>'<div class="miniItem"><b>'+d.part+' · '+d.type+'</b><br>'+(d.comment||'без комментария')+'<br>Фото зафиксировано</div>').join('');
+}
+function renderEquipList(){
+ q('equipList').innerHTML=equipment.map((d,i)=>'<div class="miniItem"><b>'+d.type+'</b><br>Стоимость: '+(d.value||'не указана')+' ₸ · '+d.condition+'<br>'+(d.comment||'')+'</div>').join('');
+}
+async function captureExtra(kind){
+ if(!(await ensureExtraCamera()))return;
+ var c=grab(q('extraVideo')),light=luminance(c);
+ var scene=await analyzeScene(c);
+ if(scene.screens&&scene.screens.length){
+   q('extraStatus').className='camStatus bad';
+   q('extraStatus').textContent='Обнаружен экран/электронное устройство. Снимайте объект непосредственно камерой.';
+   return;
+ }
+ if(light<35||light>225){
+   q('extraStatus').className='camStatus bad';
+   q('extraStatus').textContent=light<35?'Слишком темно. Добавьте освещение.':'Сильный блик. Измените угол съемки.';
+   return;
+ }
+ var image=c.toDataURL('image/jpeg',.82);
+ if(kind==='damage'){
+   damages.push({part:q('damagePart').value,type:q('damageType').value,comment:q('damageComment').value.trim(),image:image});
+   q('damageComment').value='';renderDamageList();
+   q('extraStatus').className='camStatus ok';q('extraStatus').textContent='✓ Повреждение зафиксировано. При необходимости добавьте следующее.';
+ }else{
+   equipment.push({type:q('equipType').value,value:(q('equipValue').value||'').replace(/\D/g,''),condition:q('equipCondition').value,comment:q('equipComment').value.trim(),image:image});
+   q('equipValue').value='';q('equipComment').value='';renderEquipList();
+   q('extraStatus').className='camStatus ok';q('extraStatus').textContent='✓ Дополнительное оборудование зафиксировано.';
+ }
+}
+function enterExtras(){
+ if(docStream){docStream.getTracks().forEach(t=>t.stop());docStream=null}
+ go(3);
+}
 function renderFinal(){
  if(docStream)docStream.getTracks().forEach(t=>t.stop());
- var html=reasons.length?'<div class="final review"><b>⚠ Требуется дополнительная проверка.</b><br>'+reasons.join('<br>')+'</div>':'<div class="final ok"><b>✓ Проверка пройдена.</b><br>Обязательные ракурсы, идентификаторы и документы подтверждены.</div>';
- q('summary').innerHTML=html;
- var tb=q('thumbs');tb.innerHTML='';results.forEach(r=>{var d=document.createElement('div');d.className='thumb';d.innerHTML='<img src="'+r.image+'"><div><b>'+r.name+'</b><br>Автомобиль распознан · живая съемка подтверждена<br>Требуемые зоны: '+r.parts.join(', ')+'</div>';tb.appendChild(d)});
+ if(extraStream)extraStream.getTracks().forEach(t=>t.stop());
+
+ if(damageDeclared && damages.length===0)addReason('Заявлены повреждения, но отдельные фотографии повреждений не добавлены.');
+ if(equipDeclared && equipment.length===0)addReason('Заявлено дополнительное оборудование, но оно не зафиксировано отдельным снимком.');
+
+ var outcome=reasons.length
+   ?'<div class="final review"><b>⚠ Осмотр завершен. Требуется дополнительная проверка.</b><br>'+reasons.join('<br>')+'<br><br>Автоматический отказ не формируется. Материалы направляются специалисту.</div>'
+   :'<div class="final ok"><b>✓ Осмотр завершен.</b><br>Обязательные ракурсы, идентификаторы и контрольные материалы получены. Несоответствия не выявлены.</div>';
+ q('summary').innerHTML=outcome;
+
+ var tb=q('thumbs');tb.innerHTML='';
+ results.forEach(r=>{
+   var d=document.createElement('div');d.className='thumb';
+   d.innerHTML='<img src="'+r.image+'"><div><b>'+r.name+'</b><br>Автомобиль распознан · живая съемка подтверждена<br>Контрольные зоны: '+r.parts.join(', ')+'</div>';
+   tb.appendChild(d)
+ });
+ damages.forEach(r=>{
+   var d=document.createElement('div');d.className='thumb';
+   d.innerHTML='<img src="'+r.image+'"><div><b>Повреждение: '+r.part+'</b><br>'+r.type+(r.comment?' · '+r.comment:'')+'</div>';tb.appendChild(d)
+ });
+ equipment.forEach(r=>{
+   var d=document.createElement('div');d.className='thumb';
+   d.innerHTML='<img src="'+r.image+'"><div><b>Допоборудование</b><br>'+r.type+' · '+r.condition+(r.value?' · '+r.value+' ₸':'')+'</div>';tb.appendChild(d)
+ });
+
+ var vin=norm(q('expectedVin').value),plate=norm(q('expectedPlate').value);
+ var inspectionId='KASKO-'+Date.now().toString().slice(-10);
+
  q('statusList').innerHTML=
+  '<div class="statusItem"><b>Номер осмотра</b><span>'+inspectionId+'</span></div>'+
   '<div class="statusItem"><b>Ракурсы ТС</b><span>'+results.length+'/4</span></div>'+
   '<div class="statusItem"><b>Контрольные материалы</b><span>'+Object.keys(docs).length+'/'+docDefs.length+'</span></div>'+
-  '<div class="statusItem"><b>VIN заявки</b><span>'+norm(q('expectedVin').value)+'</span></div>'+
-  '<div class="statusItem"><b>ГРНЗ заявки</b><span>'+norm(q('expectedPlate').value)+'</span></div>'+
-  '<div class="statusItem"><b>Результат</b><span>'+(reasons.length?'ручная проверка: '+reasons.join('; '):'первичный автопроход')+'</span></div>';
+  '<div class="statusItem"><b>VIN заявки</b><span>'+vin+'</span></div>'+
+  '<div class="statusItem"><b>ГРНЗ заявки</b><span>'+plate+'</span></div>'+
+  '<div class="statusItem"><b>Повреждения</b><span>'+(damageDeclared?(damages.length+' зафиксировано'):'не заявлены')+'</span></div>'+
+  '<div class="statusItem"><b>Дополнительное оборудование</b><span>'+(equipDeclared?(equipment.length+' позиций'):'не заявлено')+'</span></div>'+
+  '<div class="statusItem"><b>Результат</b><span>'+(reasons.length?'требуется проверка специалистом':'первичный контроль пройден')+'</span></div>';
 }
 
 q('startBtn').onclick=async()=>{
@@ -705,7 +901,16 @@ q('startBtn').onclick=async()=>{
 q('captureBtn').onclick=captureAngle;
 q('restartCamBtn').onclick=async()=>{await openCamera('video','car');liveMonitor()};
 q('docCaptureBtn').onclick=captureDoc;
-q('docsNext').onclick=()=>{renderFinal();go(3)};
+q('docsNext').onclick=enterExtras;
+
+q('damageYes').onclick=()=>setChoice('damageYes','damageNo','damageForm',true,'damage');
+q('damageNo').onclick=()=>setChoice('damageYes','damageNo','damageForm',false,'damage');
+q('equipYes').onclick=()=>setChoice('equipYes','equipNo','equipForm',true,'equip');
+q('equipNo').onclick=()=>setChoice('equipYes','equipNo','equipForm',false,'equip');
+q('damageCaptureBtn').onclick=()=>captureExtra('damage');
+q('equipCaptureBtn').onclick=()=>captureExtra('equip');
+q('extraNext').onclick=()=>{renderFinal();go(4)};
+
 q('restartBtn').onclick=()=>location.reload();
 
 init();
