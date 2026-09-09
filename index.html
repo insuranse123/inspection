@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Евразия — единый сервис предстрахового осмотра КАСКО</title>
-<!-- v14 HYBRID FIELD TEST: desktop demo, mobile HTTPS live camera + local OCR identity checks -->
+<!-- v15 FIELD TEST: mobile live camera + editable application data + local OCR identity checks -->
 <style>
 :root{
   --blue:#2d4f92;--cyan:#0b93c9;--ink:#173344;--muted:#758a97;--line:#dce8ee;
@@ -212,6 +212,9 @@ button,input,select,textarea{font-family:"Montserrat",Arial,Helvetica,sans-serif
 .sourceBtn{border:1px solid #d5e4ec;background:#fff;border-radius:10px;padding:8px 4px;font-size:8px;font-weight:800;color:#49687c}
 .sourceBtn.sel{border-color:#5b8ec9;background:#edf6fc;color:#244f83}
 .sourceInfo{font-size:8px;line-height:1.45;color:#6e8390;margin-top:7px}
+.testDataBar{margin-top:9px;padding:9px 10px;border:1px solid #cfe0e8;border-radius:13px;background:#f8fbfc;display:flex;align-items:center;gap:8px}
+.testDataBarText{min-width:0;flex:1}.testDataBarText b{display:block;font-size:8px;color:#23485f}.testDataBarText span{display:block;margin-top:3px;font-size:7px;line-height:1.35;color:#708690;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.testDataEditBtn{flex:none;border:1px solid #bcd6e3;background:#fff;color:#2d4f92;border-radius:9px;padding:7px 8px;font-size:7.4px;font-weight:800}
+.testForm{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.testForm label{display:block}.testForm label.wide{grid-column:1/-1}.testForm span{display:block;font-size:7.3px;font-weight:800;color:#57717f;margin:0 0 4px 2px}.testForm input{width:100%;border:1px solid #d5e4ea;border-radius:10px;background:#fff;color:#173344;padding:9px 10px;font-size:9px;outline:none}.testForm input:focus{border-color:#6d9ac8;box-shadow:0 0 0 3px rgba(75,132,186,.09)}.testHint{margin-top:8px;padding:8px 9px;border-radius:10px;background:#eef6fb;border:1px solid #d5e6f0;font-size:7.4px;line-height:1.45;color:#607b89}.testSheetActions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.testSheetActions button{margin:0}.testDataStatus{margin-top:7px;font-size:7.3px;line-height:1.4;color:#16835d;font-weight:800}.applicationDataGrid .extraField{display:block}
 .paymentWindow{display:flex;gap:10px;align-items:flex-start;margin-top:11px;padding:11px;border-radius:14px;background:#fff8e8;border:1px solid #efd7a8}
 .paymentClock{width:38px;height:38px;flex:0 0 38px;border-radius:12px;background:#2d4f92;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:900}
 .paymentWindow b{display:block;font-size:9px;color:#76531c}
@@ -329,6 +332,14 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
     <div id="sourceInfo" class="sourceInfo">Заявка создана на сайте. Если клиент открыл ее со смартфона — фотоосмотр доступен сразу.</div>
   </div>
 
+  <div class="testDataBar" id="testDataBar">
+    <div class="testDataBarText">
+      <b>ТЕСТОВЫЕ ДАННЫЕ ЗАЯВКИ</b>
+      <span id="testDataSummary">094 MAX 02 · KMHFH41HBDA336781</span>
+    </div>
+    <button type="button" id="openTestData" class="testDataEditBtn">Изменить</button>
+  </div>
+
   <div class="scenarioBox">
     <div class="scenarioTitle">ДЕМО-СЦЕНАРИЙ РЕЗУЛЬТАТА</div>
     <div class="scenarioGrid">
@@ -413,15 +424,27 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
     <div class="applicationDataGrid">
       <div>
         <small>Марка / модель</small>
-        <strong>Hyundai Grandeur</strong>
+        <strong id="modelValue">Hyundai Grandeur</strong>
       </div>
       <div>
         <small>ГРНЗ</small>
-        <strong>123 ABC 02</strong>
+        <strong id="plateValue">094 MAX 02</strong>
       </div>
       <div class="wide">
         <small>VIN</small>
-        <strong id="vinValue">KMHFG41DBDA123456</strong>
+        <strong id="vinValue">KMHFH41HBDA336781</strong>
+      </div>
+      <div class="extraField">
+        <small>Год выпуска</small>
+        <strong id="yearValue">2013</strong>
+      </div>
+      <div class="extraField">
+        <small>Цвет</small>
+        <strong id="colorValue">BLACK</strong>
+      </div>
+      <div class="wide extraField">
+        <small>Собственник (для теста)</small>
+        <strong id="ownerValue">ЕРЖАНОВА АЙСУЛУ ЕРЖАНОВНА</strong>
       </div>
     </div>
   </div>
@@ -698,8 +721,8 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
     <div class="actGrid">
       <span>Осмотр №</span><strong>EU-845219</strong>
       <span>ТС</span><strong>Hyundai Grandeur</strong>
-      <span>ГРНЗ</span><strong>123 ABC 02</strong>
-      <span>VIN</span><strong>KMHFG41DBDA123456</strong>
+      <span>ГРНЗ</span><strong>094 MAX 02</strong>
+      <span>VIN</span><strong>KMHFH41HBDA336781</strong>
       <span>Способ</span><strong>Самостоятельный онлайн-осмотр</strong>
       <span>Доп. оборудование</span><strong id="actEquip">По данным осмотра</strong>
       <span>Заявленная стоимость</span><strong id="actEquipCost">По данным осмотра</strong>
@@ -1103,6 +1126,27 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
   <button id="adjusterReject" class="secondary" style="margin-top:8px">Не подтверждать осмотр</button>
 </div></div>
 
+<div id="testDataSheet" class="sheetback"><div class="sheet"><div class="handle"></div>
+  <div class="eyebrow">Полевой тест</div>
+  <h2 style="font-size:19px;margin-top:6px">Данные заявки для сверки</h2>
+  <p class="copy">На телефоне камера будет сравнивать распознанные VIN и ГРНЗ именно с этими значениями. Их можно менять перед каждым тестом.</p>
+  <div class="testForm">
+    <label class="wide"><span>Марка / модель</span><input id="testModel" value="Hyundai Grandeur" autocomplete="off"></label>
+    <label><span>ГРНЗ</span><input id="testPlate" value="094 MAX 02" autocomplete="off" autocapitalize="characters"></label>
+    <label><span>Год выпуска</span><input id="testYear" value="2013" inputmode="numeric" autocomplete="off"></label>
+    <label class="wide"><span>VIN — 17 символов</span><input id="testVin" value="KMHFH41HBDA336781" maxlength="17" autocomplete="off" autocapitalize="characters"></label>
+    <label><span>Цвет</span><input id="testColor" value="BLACK" autocomplete="off"></label>
+    <label class="wide"><span>Собственник (не участвует в OCR-решении)</span><input id="testOwner" value="ЕРЖАНОВА АЙСУЛУ ЕРЖАНОВНА" autocomplete="off"></label>
+  </div>
+  <div class="testHint"><b>Важно:</b> изменение этих полей меняет только эталонные данные заявки. Для проверки защиты оставьте правильные реквизиты и покажите камере другой СРТС / другой номер / фото документа с экрана.</div>
+  <div id="testDataStatus" class="testDataStatus">Эталон: VIN KMHFH41HBDA336781 · ГРНЗ 094 MAX 02</div>
+  <button id="saveTestData" class="primary" style="margin-top:10px">Применить для теста</button>
+  <div class="testSheetActions">
+    <button id="resetTestData" class="secondary">Вернуть данные СРТС</button>
+    <button id="closeTestData" class="secondary">Закрыть</button>
+  </div>
+</div></div>
+
 <div id="rejectedSheet" class="sheetback"><div class="sheet"><div class="handle"></div>
   <div class="notice red"><span class="dot"></span><div><b>Осмотр не подтвержден</b><p>Оплата по заявке недоступна до принятия решения специалистом либо прохождения требуемого дополнительного осмотра.</p></div></div>
   <button id="rejectClose" class="secondary" style="margin-top:10px">Вернуться</button>
@@ -1115,7 +1159,8 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
 <script>
 (function(){
 const $=id=>document.getElementById(id);
-const state={step:1,channel:'photo',source:'site',scenario:'success',docs:new Set(),angles:0,ctrl:new Set(),damage:null,damages:[],damageDraft:null,editDamageIndex:null,damageConfirmed:false,geo:false,pending:null,stream:null,taskStream:null,captures:{},validationLog:[],paid:false,selectedDate:null,selectedTime:null,officeName:null,officeDate:null,officeTime:null,paymentMode:'photo',onboard:0,retakeLocalDone:false};
+const DEFAULT_APP_DATA={model:'Hyundai Grandeur',plate:'094 MAX 02',vin:'KMHFH41HBDA336781',year:'2013',color:'BLACK',owner:'ЕРЖАНОВА АЙСУЛУ ЕРЖАНОВНА'};
+const state={step:1,channel:'photo',source:'site',scenario:'success',docs:new Set(),angles:0,ctrl:new Set(),damage:null,damages:[],damageDraft:null,editDamageIndex:null,damageConfirmed:false,geo:false,pending:null,stream:null,taskStream:null,captures:{},validationLog:[],paid:false,selectedDate:null,selectedTime:null,officeName:null,officeDate:null,officeTime:null,paymentMode:'photo',onboard:0,retakeLocalDone:false,appData:{...DEFAULT_APP_DATA}};
 const params=new URLSearchParams(location.search);
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const isMobile=/Android|Mobile|iPhone|iPad|iPod/i.test(navigator.userAgent)||isIOS;
@@ -1123,31 +1168,36 @@ const requestedCamera=params.get('camera');
 const LIVE_CAMERA_MODE=requestedCamera==='live'||(requestedCamera!=='demo'&&isMobile&&window.isSecureContext);
 const DEMO_CAMERA=!LIVE_CAMERA_MODE;
 const STRICT_FIELD_TEST=LIVE_CAMERA_MODE && params.get('strict')!=='0';
-const EXPECTED_VIN=(params.get('vin')||(($('vinValue')&&$('vinValue').textContent)||'')).toUpperCase().replace(/[^A-Z0-9]/g,'');
-function readDisplayedPlate(){
-  for(const box of document.querySelectorAll('.applicationDataGrid > div')){
-    const label=(box.querySelector('small')?.textContent||'').trim().toUpperCase();
-    if(label.includes('ГРНЗ'))return (box.querySelector('strong')?.textContent||'').trim();
-  }
-  return '123 ABC 02';
-}
-const EXPECTED_PLATE=(params.get('plate')||readDisplayedPlate()).toUpperCase().replace(/[^A-Z0-9А-ЯЁ]/g,'');
-if(params.get('vin')&&$('vinValue'))$('vinValue').textContent=params.get('vin').toUpperCase();
-if(params.get('plate')){
-  for(const box of document.querySelectorAll('.applicationDataGrid > div')){
-    const label=(box.querySelector('small')?.textContent||'').trim().toUpperCase();
-    if(label.includes('ГРНЗ')){const el=box.querySelector('strong');if(el)el.textContent=params.get('plate').toUpperCase();break}
-  }
+function normalizeVin(v){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,17)}
+function normalizePlate(v){return String(v||'').toUpperCase().replace(/[^A-Z0-9А-ЯЁ]/g,'')}
+function expectedVin(){return normalizeVin(state.appData&&state.appData.vin)}
+function expectedPlate(){return normalizePlate(state.appData&&state.appData.plate)}
+if(params.get('vin'))state.appData.vin=params.get('vin').toUpperCase();
+if(params.get('plate'))state.appData.plate=params.get('plate').toUpperCase();
+if(params.get('model'))state.appData.model=params.get('model');
+if(params.get('year'))state.appData.year=params.get('year');
+function applyAppDataUI(){
+  const d=state.appData||DEFAULT_APP_DATA;
+  if($('modelValue'))$('modelValue').textContent=d.model||'—';
+  if($('plateValue'))$('plateValue').textContent=(d.plate||'—').toUpperCase();
+  if($('vinValue'))$('vinValue').textContent=(d.vin||'—').toUpperCase();
+  if($('yearValue'))$('yearValue').textContent=d.year||'—';
+  if($('colorValue'))$('colorValue').textContent=(d.color||'—').toUpperCase();
+  if($('ownerValue'))$('ownerValue').textContent=d.owner||'—';
+  if($('testDataSummary'))$('testDataSummary').textContent=((d.plate||'—').toUpperCase())+' · '+((d.vin||'—').toUpperCase());
+  const pairs={testModel:d.model,testPlate:d.plate,testVin:d.vin,testYear:d.year,testColor:d.color,testOwner:d.owner};
+  Object.entries(pairs).forEach(([id,val])=>{if($(id))$(id).value=val||''});
+  if($('testDataStatus')){$('testDataStatus').style.color='#16835d';$('testDataStatus').textContent='Эталон: VIN '+((d.vin||'—').toUpperCase())+' · ГРНЗ '+((d.plate||'—').toUpperCase());}
 }
 const names=['Способ','Документы','Кузов','Контроль','Проверка','Результат','Оплата'];
 // В GitHub field-test фото остаются только в памяти текущей вкладки. В промышленной версии материалы должны сохраняться на backend.
-const STORAGE_KEY=LIVE_CAMERA_MODE?'eurasia_inspection_fieldtest_v14':'eurasia_inspection_demo_v14';
+const STORAGE_KEY=LIVE_CAMERA_MODE?'eurasia_inspection_fieldtest_v15':'eurasia_inspection_demo_v15';
 function serializableState(){
   return {
     step:state.step,channel:state.channel,source:state.source,scenario:state.scenario,
     docs:[...state.docs],angles:state.angles,ctrl:[...state.ctrl],
     damage:state.damage,damages:state.damages,damageConfirmed:state.damageConfirmed,geo:state.geo,
-    selectedDate:state.selectedDate,selectedTime:state.selectedTime
+    selectedDate:state.selectedDate,selectedTime:state.selectedTime,appData:state.appData
   };
 }
 function persistState(){
@@ -1176,6 +1226,7 @@ function restoreState(){
     state.damageConfirmed=!!s.damageConfirmed;
     state.geo=!!s.geo;
     state.selectedDate=s.selectedDate||null;state.selectedTime=s.selectedTime||null;
+    if(s.appData&&typeof s.appData==='object')state.appData={...DEFAULT_APP_DATA,...s.appData};
     return state.step>1||state.docs.size||state.angles||state.ctrl.size;
   }catch(e){return false}
 }
@@ -1311,8 +1362,37 @@ $('closeHandoff').onclick=()=>$('handoffSheet').classList.remove('show');
 $('sendSmsBtn').onclick=()=>alert('Демо: SMS-ссылка на осмотр EU-845219 отправлена на номер из заявки.');
 $('showQrBtn').onclick=()=>alert('Демо: QR-код открывает ту же сессию осмотра EU-845219 на смартфоне.');
 
+function resetIdentityDependentProgress(){
+  ['docFront'].forEach(id=>state.docs.delete(id));
+  ['vinCar','plateCar'].forEach(id=>state.ctrl.delete(id));
+  ['docFront','vinCar','plateCar'].forEach(id=>{
+    const el=$(id);if(!el)return;el.classList.remove('done');
+    const b=el.querySelector('button');if(b){b.classList.remove('done');b.textContent='Снять'}
+  });
+  state.validationLog=(state.validationLog||[]).filter(x=>!['docFront','vinCar','plateCar'].includes(x&&x.id));
+  checkDocs();
+  if(typeof checkControl==='function')checkControl();
+}
+function openTestDataSheet(){applyAppDataUI();if($('testDataSheet'))$('testDataSheet').classList.add('show')}
+if($('openTestData'))$('openTestData').onclick=openTestDataSheet;
+if($('closeTestData'))$('closeTestData').onclick=()=>$('testDataSheet').classList.remove('show');
+if($('resetTestData'))$('resetTestData').onclick=()=>{
+  state.appData={...DEFAULT_APP_DATA};applyAppDataUI();resetIdentityDependentProgress();persistState();
+  if($('testDataStatus'))$('testDataStatus').textContent='✓ Возвращены данные СРТС: VIN '+DEFAULT_APP_DATA.vin+' · ГРНЗ '+DEFAULT_APP_DATA.plate;
+};
+if($('saveTestData'))$('saveTestData').onclick=()=>{
+  const vin=normalizeVin($('testVin').value);
+  const plate=String($('testPlate').value||'').trim().toUpperCase();
+  if(vin.length!==17){$('testDataStatus').textContent='VIN должен содержать ровно 17 букв/цифр.';$('testDataStatus').style.color='#a33737';return}
+  if(normalizePlate(plate).length<5){$('testDataStatus').textContent='Проверьте ГРНЗ: значение слишком короткое.';$('testDataStatus').style.color='#a33737';return}
+  state.appData={model:String($('testModel').value||'').trim()||'—',plate,vin,year:String($('testYear').value||'').trim(),color:String($('testColor').value||'').trim().toUpperCase(),owner:String($('testOwner').value||'').trim()};
+  applyAppDataUI();resetIdentityDependentProgress();persistState();
+  $('testDataStatus').style.color='#16835d';$('testDataStatus').textContent='✓ Применено. OCR теперь сверяет VIN '+state.appData.vin+' и ГРНЗ '+state.appData.plate;
+  setTimeout(()=>{$('testDataSheet').classList.remove('show')},450);
+};
+
 function checkDocs(){
-  const vin=(($('vinValue')&&$('vinValue').textContent)||'').trim();
+  const vin=normalizeVin(state.appData&&state.appData.vin);
   $('docsNext').disabled=!(vin.length===17 && state.docs.size===2);
   persistState();
 }
@@ -1457,7 +1537,7 @@ async function validateCapturedIdentity(key,c){
   if(!LIVE_CAMERA_MODE||!STRICT_FIELD_TEST||!['docFront','vinCar','plateCar'].includes(key))return {ok:true,message:DEMO_CAMERA?'✓ Демо-кадр сформирован и принят.':'✓ Кадр прошел локальную проверку качества.'};
   try{
     const text=await ocrCanvas(c);
-    const vinOk=containsVin(text,EXPECTED_VIN),plateOk=containsExpected(text,EXPECTED_PLATE);
+    const vinOk=containsVin(text,expectedVin()),plateOk=containsExpected(text,expectedPlate());
     if(key==='docFront'){
       if(vinOk&&plateOk)return {ok:true,message:'✓ СРТС: VIN и ГРНЗ совпали с данными заявки.',ocr:text};
       const miss=[];if(!vinOk)miss.push('VIN');if(!plateOk)miss.push('ГРНЗ');
@@ -2129,12 +2209,14 @@ $('adjusterReject').onclick=()=>{
 $('rejectClose').onclick=()=>$('rejectedSheet').classList.remove('show');
 
 
+applyAppDataUI();
 const hadSaved=restoreState();
+applyAppDataUI();
 if(hadSaved){
   $('autoConsent').checked=true;$('startBtn').disabled=false;
   setChannel(state.channel);setSource(state.source);setScenario(state.scenario);
   if($('officeDate')){$('officeDate').min=new Date().toISOString().slice(0,10);if(state.officeDate)$('officeDate').value=state.officeDate;if(state.officeTime)$('officeTime').value=state.officeTime;refreshOfficeBooking();}
-  if($('vinValue'))$('vinValue').textContent='KMHFG41DBDA123456';
+  applyAppDataUI();
   state.docs.forEach(id=>{
     const el=$(id);if(el){el.classList.add('done');const b=el.querySelector('button');if(b){b.textContent='Готово';b.classList.add('done')}}
   });
