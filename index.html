@@ -2,9 +2,12 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff">
 <title>Евразия — единый сервис предстрахового осмотра КАСКО</title>
-<!-- v19 FIELD TEST: robust VIN OCR + active multi-frame anti-spoof/liveness + real in-browser vehicle detection (COCO-SSD) + fail-closed mobile capture -->
+<!-- v20 NATIVE MOBILE FIELD TEST: desktop keeps phone mockup; real smartphones render the inspection as a full-screen web app -->
 <style>
 :root{
   --blue:#2d4f92;--cyan:#0b93c9;--ink:#173344;--muted:#758a97;--line:#dce8ee;
@@ -38,7 +41,51 @@ button,input,select,textarea{font-family:"Montserrat",Arial,Helvetica,sans-serif
 .sheetback{position:absolute;inset:0;z-index:70;background:rgba(7,24,32,.32);backdrop-filter:blur(4px);display:none;align-items:flex-end}.sheetback.show{display:flex}.sheet{width:100%;max-height:79%;overflow-y:auto;background:#fff;border-radius:28px 28px 0 0;padding:18px 18px 23px}.handle{width:40px;height:4px;background:#dce6eb;border-radius:99px;margin:0 auto 18px}
 .calhead{display:flex;justify-content:space-between;align-items:center;margin-top:13px}.calnav{width:32px;height:32px;border-radius:10px;border:1px solid #d8e7ee;background:#fff;color:#2d4f92;font-weight:700}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:10px}.dow{font-size:9px;text-align:center;color:#9aa9b1;font-weight:700;padding:5px 0}.day{height:36px;border-radius:10px;border:1px solid #e0e9ed;background:#fff;font-size:10px;color:#3f5968;font-weight:800}.day.off{background:#f6f8f9;color:#c2ccd1;border-color:#eef2f4}.day.sel{background:#2f5a9b;color:#fff;border-color:#2f5a9b}.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}.slot{height:38px;border-radius:11px;border:1px solid #dbe7ed;background:#fff;color:#315b84;font-size:10px;font-weight:700}.slot.sel{background:#eaf4fb;border-color:#6ba9cf;color:#1d5a82}
 .payment{display:flex;gap:11px;align-items:center;border:1px solid #dce8ef;border-radius:15px;padding:12px;background:#fff;margin-top:9px}.radio{width:16px;height:16px;border-radius:50%;border:1px solid #94a5af}.payment.sel .radio{border:5px solid var(--blue)}.paylogo{margin-left:auto;font-weight:700;font-size:18px}.foot{font-size:9px;line-height:1.5;color:#98a9b3;text-align:center;margin-top:9px}.home{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);width:118px;height:4px;background:#121b20;border-radius:99px;z-index:80}
-@media(max-width:920px){.topbar{display:none}.shell{grid-template-columns:1fr;padding:8px}.pitch{display:none}.phone{width:min(402px,calc(100vw - 8px));height:min(850px,calc(100vh - 8px));margin:auto}}
+@media(max-width:920px){
+  html,body{width:100%;height:100%;min-height:100%;overflow:hidden;background:#fff}
+  .topbar,.pitch,.island{display:none!important}
+  .shell{display:block;width:100%;height:100dvh;min-height:100dvh;padding:0;margin:0}
+  .phone{
+    width:100vw;height:100dvh;max-width:none;max-height:none;
+    padding:0;margin:0;border-radius:0;background:#fff;box-shadow:none
+  }
+  .screen{
+    width:100%;height:100dvh;min-height:100dvh;
+    border-radius:0;overflow:hidden;background:#fff
+  }
+  .head{
+    top:0;height:calc(100px + env(safe-area-inset-top));
+    padding:calc(10px + env(safe-area-inset-top)) 14px 8px;
+    background:#fff
+  }
+  .panel{
+    inset:calc(100px + env(safe-area-inset-top)) 0 0;
+    padding:14px 16px calc(24px + env(safe-area-inset-bottom));
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch
+  }
+  .sheetback{position:fixed;inset:0;border-radius:0}
+  .sheet{padding-bottom:calc(23px + env(safe-area-inset-bottom))}
+  .brand{gap:7px}
+  .brand img{width:31px;height:31px}
+  .brandname{font-size:14px}
+  .sub{font-size:8px}
+  .saveBadge{display:none}
+  .reset{font-size:9px}
+  .back{padding:7px 9px;font-size:9px}
+  .uiTools{margin-top:5px}
+  .meta{margin-top:7px}
+}
+
+/* Более компактный нативный режим для узких iPhone */
+@media(max-width:390px){
+  .head{height:calc(96px + env(safe-area-inset-top));padding-left:12px;padding-right:12px}
+  .panel{inset:calc(96px + env(safe-area-inset-top)) 0 0;padding-left:13px;padding-right:13px}
+  .brand img{width:29px;height:29px}
+  .brandname{font-size:13px}
+  .back{padding:6px 8px}
+  .reset{display:none}
+}
 
 .scenarioBox{margin-top:13px;border:1px dashed #b9d2e2;background:#f8fcfe;border-radius:17px;padding:12px}
 .scenarioTitle{font-size:10px;font-weight:700;color:#57758a;margin-bottom:8px}
