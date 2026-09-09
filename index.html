@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Евразия — единый сервис предстрахового осмотра КАСКО</title>
-<!-- v18 FIELD TEST: robust VIN OCR + active multi-frame anti-spoof/liveness for body angles + fail-closed mobile capture -->
+<!-- v19 FIELD TEST: robust VIN OCR + active multi-frame anti-spoof/liveness + real in-browser vehicle detection (COCO-SSD) + fail-closed mobile capture -->
 <style>
 :root{
   --blue:#2d4f92;--cyan:#0b93c9;--ink:#173344;--muted:#758a97;--line:#dce8ee;
@@ -492,7 +492,7 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
       <div class="qChips">
         <span id="qBlur">Резкость</span>
         <span id="qLight">Освещение</span>
-        <span id="qCar">Автомобиль в кадре</span>
+        <span id="qCar">Автомобиль распознан AI</span>
         <span id="qScreen">Не снимок экрана</span>
       </div>
       <div id="qMessage">Готово к съемке</div>
@@ -1445,7 +1445,7 @@ function setCameraModeUI(){
   }
   if($('cameraModeTitle'))$('cameraModeTitle').textContent=live?'Полевая тестовая съемка':'Демонстрационный режим';
   if($('cameraModeText'))$('cameraModeText').textContent=live
-    ?'Используется живая камера смартфона. Галерея недоступна. Для СРТС, VIN и ГРНЗ включена OCR-сверка; для 4 ракурсов — активная многокадровая anti-spoof/liveness-проверка.'
+    ?'Используется живая камера смартфона. Галерея недоступна. Для СРТС, VIN и ГРНЗ включена OCR-сверка; для 4 ракурсов — активная anti-spoof/liveness-проверка и реальное распознавание автомобиля в кадре.'
     :'Камера устройства не используется. Нажатие «Снять» имитирует текущую съемку и прохождение проверки.';
 }
 setCameraModeUI();
@@ -1779,6 +1779,57 @@ function analyzeVideoFrame(){
   const c=drawVideoFrame($('video'));if(!c)return {available:false,ok:false};const m=frameMetrics(c);return {available:true,ok:m.ok,brightness:m.lum,sharpness:m.sharp,glareRatio:m.glare,canvas:c};
 }
 
+
+let cocoModelPromise=null;
+async function loadExternalScript(src,id){
+  if(id&&document.getElementById(id))return;
+  await new Promise((resolve,reject)=>{
+    const sc=document.createElement('script');if(id)sc.id=id;sc.src=src;sc.async=true;sc.onload=()=>resolve();sc.onerror=()=>reject(new Error('Не удалось загрузить '+src));document.head.appendChild(sc)
+  })
+}
+async function loadCocoModel(){
+  if(cocoModelPromise)return cocoModelPromise;
+  cocoModelPromise=(async()=>{
+    if(!window.tf)await loadExternalScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js','tfjs-runtime');
+    if(!window.cocoSsd)await loadExternalScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js','coco-ssd-runtime');
+    if(!window.cocoSsd)throw new Error('COCO-SSD не загрузился');
+    return await window.cocoSsd.load({base:'lite_mobilenet_v2'});
+  })();
+  return cocoModelPromise;
+}
+function describeDetections(preds){
+  return (preds||[]).slice(0,8).map(p=>`${p.class} ${Math.round((p.score||0)*100)}%`).join(', ')
+}
+async function detectVehicleInFrame(canvas){
+  if(!LIVE_CAMERA_MODE)return {ok:true,className:'demo-car',score:1,coverage:1,predictions:[]};
+  try{
+    setQualityMessage('', 'AI-проверка: ищем автомобиль в кадре…');
+    const model=await loadCocoModel();
+    const preds=await model.detect(canvas,12,0.30);
+    const vehicleClasses=new Set(['car','truck','bus']);
+    const candidates=preds.filter(p=>vehicleClasses.has(p.class));
+    if(!candidates.length){
+      return {ok:false,reason:'no_vehicle',predictions:preds,message:`Автомобиль в кадре не найден. AI увидел: ${describeDetections(preds)||'объект не распознан'}. Кадр не принят.`}
+    }
+    candidates.sort((a,b)=>(b.score||0)-(a.score||0));
+    const p=candidates[0],box=p.bbox||[0,0,0,0],coverage=(box[2]*box[3])/(canvas.width*canvas.height);
+    const widthShare=box[2]/canvas.width,heightShare=box[3]/canvas.height;
+    const score=p.score||0;
+    // Требуем не только класс "car", но и достаточно крупный объект — это не дает засчитать автомобиль вдали/на картинке в углу.
+    const largeEnough=coverage>=0.075 || (widthShare>=0.38 && heightShare>=0.23);
+    const confident=score>=0.42;
+    if(!confident||!largeEnough){
+      return {ok:false,reason:'weak_vehicle',className:p.class,score,coverage,predictions:preds,
+        message:`Автомобиль распознан недостаточно уверенно или слишком мал в кадре (${Math.round(score*100)}%, площадь ${Math.round(coverage*100)}%). Подойдите ближе и поместите автомобиль целиком в рамку.`}
+    }
+    return {ok:true,className:p.class,score,coverage,bbox:box,predictions:preds,
+      message:`✓ Автомобиль найден AI: ${p.class}, уверенность ${Math.round(score*100)}%.`}
+  }catch(e){
+    // В строгом тесте ошибка модели НЕ превращается в успешный осмотр.
+    return {ok:false,reason:'model_error',predictions:[],message:'AI-модель распознавания автомобиля не загрузилась. В строгом полевом режиме кадр не принимается без семантической проверки. Проверьте интернет и повторите.'}
+  }
+}
+
 async function captureAngle(){
   if(busy||state.angles>=4)return;
   busy=true;$('captureBtn').disabled=true;$('shutter').disabled=true;
@@ -1802,38 +1853,66 @@ async function captureAngle(){
     liveFrame=document.createElement('canvas');liveFrame.width=1280;liveFrame.height=720;const lctx=liveFrame.getContext('2d');const lg=lctx.createLinearGradient(0,0,1280,720);lg.addColorStop(0,'#35515e');lg.addColorStop(1,'#182a32');lctx.fillStyle=lg;lctx.fillRect(0,0,1280,720);lctx.fillStyle='rgba(255,255,255,.92)';lctx.textAlign='center';lctx.font='700 42px Arial';lctx.fillText(angleNames[state.angles]||'Демо-ракурс',640,340);lctx.font='600 24px Arial';lctx.fillStyle='rgba(255,255,255,.72)';lctx.fillText('ДЕМО · камера устройства не подключена',640,390)
   }
 
+  // 1) Сначала реально проверяем, что в кадре именно транспортное средство.
+  const vehicle1=await detectVehicleInFrame(liveFrame);
+  if(!vehicle1.ok){
+    setQualityChip('qBlur','qok');setQualityChip('qLight','qok');setQualityChip('qCar','qbad');setQualityChip('qScreen','qwait');
+    setQualityMessage('bad',vehicle1.message);$('captureMsg').textContent='Кадр не принят: автомобиль не подтвержден AI.';
+    $('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
+  }
+  setQualityChip('qCar','qok');
+
+  // 2) Статический анализ признаков экрана.
   const anti1=LIVE_CAMERA_MODE?screenArtifactAnalysis(liveFrame,'scene'):{suspicious:false,score:0};
   if(LIVE_CAMERA_MODE&&anti1.suspicious){
-    setQualityChip('qBlur','qok');setQualityChip('qLight','qok');setQualityChip('qCar','qwait');setQualityChip('qScreen','qbad');setQualityMessage('bad',`Обнаружены признаки экрана/пересъемки (anti-spoof ${anti1.score}%). Покажите реальный автомобиль.`);$('captureMsg').textContent='Кадр не принят: вероятна пересъемка экрана.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
+    setQualityChip('qBlur','qok');setQualityChip('qLight','qok');setQualityChip('qCar','qok');setQualityChip('qScreen','qbad');
+    setQualityMessage('bad',`Автомобиль найден, но обнаружены признаки экрана/пересъемки (anti-spoof ${anti1.score}%). Покажите реальный автомобиль.`);
+    $('captureMsg').textContent='Кадр не принят: вероятна пересъемка экрана.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
   }
 
+  // 3) Активная liveness-проверка: второй кадр после небольшого движения.
   if(LIVE_CAMERA_MODE&&STRICT_FIELD_TEST){
     setQualityMessage('', 'Liveness: слегка сместите телефон на 3–5 см в сторону, не меняя объект.');
-    $('captureMsg').innerHTML='<span class="loader"></span>Слегка сместите телефон в сторону — снимаем короткую серию…';
+    $('captureMsg').innerHTML='<span class="loader"></span>Слегка сместите телефон в сторону — снимаем второй кадр…';
     await sleep(850);
     const second=drawVideoFrame($('video'));
     if(!second){setQualityMessage('bad','Не удалось получить второй кадр серии. Повторите.');$('captureMsg').textContent='Anti-spoof не подтвержден. Повторите.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return}
     const q2=frameMetrics(second);
     if(!q2.ok){setQualityMessage('bad','Второй кадр серии получился некачественным. Повторите съемку и двигайте телефон плавно.');$('captureMsg').textContent='Короткая серия не принята.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return}
+
+    // На втором кадре снова должен быть автомобиль. Стол/стена/комната уже не смогут пройти.
+    const vehicle2=await detectVehicleInFrame(second);
+    if(!vehicle2.ok){
+      setQualityChip('qCar','qbad');setQualityChip('qScreen','qwait');setQualityMessage('bad','Во втором кадре серии автомобиль потерян или не распознан. Кадр не принят. Держите тот же автомобиль в рамке во время небольшого смещения.');
+      $('captureMsg').textContent='Кадр не принят: автомобиль не подтвержден во всей серии.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
+    }
+
     const anti2=screenArtifactAnalysis(second,'scene'),live=motionLivenessAnalysis(liveFrame,second);
     if(anti2.suspicious){
-      setQualityChip('qBlur','qok');setQualityChip('qLight','qok');setQualityChip('qCar','qwait');setQualityChip('qScreen','qbad');setQualityMessage('bad',`Во втором кадре серии обнаружены признаки экрана (anti-spoof ${anti2.score}%). Кадр не принят.`);$('captureMsg').textContent='Кадр не принят: вероятна пересъемка экрана.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
+      setQualityChip('qBlur','qok');setQualityChip('qLight','qok');setQualityChip('qCar','qok');setQualityChip('qScreen','qbad');
+      setQualityMessage('bad',`Во втором кадре серии обнаружены признаки экрана (anti-spoof ${anti2.score}%). Кадр не принят.`);
+      $('captureMsg').textContent='Кадр не принят: вероятна пересъемка экрана.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
     }
     if(live.noMotion){
-      setQualityChip('qScreen','qwait');setQualityMessage('bad','Не удалось подтвердить живую сцену: движения камеры недостаточно. Повторите и слегка сместите телефон на 3–5 см.');$('captureMsg').textContent='Anti-spoof не подтвержден. Повторите.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
+      setQualityChip('qScreen','qwait');setQualityMessage('bad','Не удалось подтвердить живую сцену: движения камеры недостаточно. Повторите и слегка сместите телефон на 3–5 см.');
+      $('captureMsg').textContent='Anti-spoof не подтвержден. Повторите.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
     }
     if(live.flatPlane){
-      setQualityChip('qScreen','qbad');setQualityMessage('bad',`Объект ведет себя как плоская поверхность/экран. Liveness ${live.confidence}%. Кадр не принят.`);$('captureMsg').textContent='Кадр не принят: вероятна фотография экрана или плоского изображения.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
+      setQualityChip('qScreen','qbad');setQualityMessage('bad',`Объект ведет себя как плоская поверхность/экран. Liveness ${live.confidence}%. Кадр не принят.`);
+      $('captureMsg').textContent='Кадр не принят: вероятна фотография экрана или плоского изображения.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
     }
     if(!live.ok){
-      setQualityChip('qScreen','qwait');setQualityMessage('bad','Anti-spoof дал неопределенный результат. По принципу fail-safe кадр не принимается — повторите съемку.');$('captureMsg').textContent='Anti-spoof не подтвержден. Повторите.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
+      setQualityChip('qScreen','qwait');setQualityMessage('bad','Anti-spoof дал неопределенный результат. По принципу fail-safe кадр не принимается — повторите съемку.');
+      $('captureMsg').textContent='Anti-spoof не подтвержден. Повторите.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
     }
     liveFrame=second;
   }
 
-  state.captures['angle'+state.angles]=liveFrame.toDataURL('image/jpeg',.82);state.angles++;updateAngles();persistState();setQualityChip('qBlur','qok');setQualityChip('qLight','qok');
-  setQualityChip('qCar',LIVE_CAMERA_MODE?'qwait':'qok');setQualityChip('qScreen','qok');
-  setQualityMessage('good',LIVE_CAMERA_MODE?'Кадр принят: статический anti-screen и активная liveness-проверка пройдены. Семантика автомобиля требует отдельной CV-модели.':'Кадр прошел первичную демо-проверку и принят');
+  state.captures['angle'+state.angles]=liveFrame.toDataURL('image/jpeg',.82);state.angles++;updateAngles();persistState();
+  setQualityChip('qBlur','qok');setQualityChip('qLight','qok');setQualityChip('qCar','qok');setQualityChip('qScreen','qok');
+  setQualityMessage('good',LIVE_CAMERA_MODE
+    ?`Кадр принят: автомобиль подтвержден AI, качество, anti-screen и активная liveness-проверка пройдены.`
+    :'Кадр прошел первичную демо-проверку и принят');
   if(state.angles<4){$('captureBtn').disabled=false;$('shutter').disabled=false;$('captureMsg').textContent='✓ Кадр сохранен. Следующий ракурс.'}
   busy=false;
 }
