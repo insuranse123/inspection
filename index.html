@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Евразия — единый сервис предстрахового осмотра КАСКО</title>
+<!-- v14 HYBRID FIELD TEST: desktop demo, mobile HTTPS live camera + local OCR identity checks -->
 <style>
 :root{
   --blue:#2d4f92;--cyan:#0b93c9;--ink:#173344;--muted:#758a97;--line:#dce8ee;
@@ -799,19 +800,19 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
 
 <div id="cameraSheet" class="sheetback"><div class="sheet"><div class="handle"></div>
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
-    <div><div class="eyebrow">Демо-камера</div><h2 id="taskCameraTitle" style="font-size:20px">Снимок</h2><p id="taskCameraText" class="copy">Наведите камеру на запрошенный объект.</p></div>
+    <div><div id="taskCameraEyebrow" class="eyebrow">Демо-камера</div><h2 id="taskCameraTitle" style="font-size:20px">Снимок</h2><p id="taskCameraText" class="copy">Наведите камеру на запрошенный объект.</p></div>
     <button id="closeCameraSheet" style="border:0;background:none;font-size:18px">×</button>
   </div>
   <div class="camera" style="height:360px;margin-top:12px">
-    <video id="taskVideo" playsinline autoplay muted></video><div class="demoCameraWatermark">ДЕМО · реальная камера не подключается</div>
+    <video id="taskVideo" playsinline autoplay muted></video><div id="demoCameraWatermark" class="demoCameraWatermark">ДЕМО · реальная камера не подключается</div>
     <div class="grid"></div>
     <div id="taskCameraLabel" class="label">Демо-съемка</div>
     <div id="taskCameraStatus" class="localQuality good">Демо-режим: нажмите «Снять» для имитации кадра.</div>
   </div>
-  <div class="browserCheckNote"><b>Демонстрационный режим</b><span>Камера устройства не используется. Нажатие «Снять» имитирует текущую съемку и прохождение проверки.</span></div>
+  <div class="browserCheckNote"><b id="cameraModeTitle">Демонстрационный режим</b><span id="cameraModeText">Камера устройства не используется. Нажатие «Снять» имитирует текущую съемку и прохождение проверки.</span></div>
   <div id="taskPreviewWrap" class="hidden" style="margin-top:10px"><div class="soft" style="padding:8px"><b style="font-size:9px">Принятый кадр</b><img id="taskPreview" alt="" style="display:block;width:100%;max-height:180px;object-fit:cover;border-radius:12px;margin-top:7px"></div></div>
   <button id="captureTaskBtn" class="primary" disabled>Снять</button>
-  <button id="retryCameraBtn" class="secondary hidden" style="margin-top:8px">Повторить демо-съемку</button>
+  <button id="retryCameraBtn" class="secondary hidden" style="margin-top:8px">Повторить запуск камеры</button>
   <button id="retakeTaskBtn" class="secondary hidden" style="margin-top:8px">Переснять</button>
   <button id="cancelTaskBtn" class="secondary" style="margin-top:8px">Отмена</button>
 </div></div>
@@ -1114,12 +1115,33 @@ body.dark #equipNoDocHint{color:#a9bcc6!important}
 <script>
 (function(){
 const $=id=>document.getElementById(id);
-const state={step:1,channel:'photo',source:'site',scenario:'success',docs:new Set(),angles:0,ctrl:new Set(),damage:null,damages:[],damageDraft:null,editDamageIndex:null,damageConfirmed:false,geo:false,pending:null,stream:null,taskStream:null,captures:{},paid:false,selectedDate:null,selectedTime:null,officeName:null,officeDate:null,officeTime:null,paymentMode:'photo',onboard:0,retakeLocalDone:false};
-const DEMO_CAMERA=true; // В этой демонстрационной версии доступ к камере устройства намеренно отключен.
+const state={step:1,channel:'photo',source:'site',scenario:'success',docs:new Set(),angles:0,ctrl:new Set(),damage:null,damages:[],damageDraft:null,editDamageIndex:null,damageConfirmed:false,geo:false,pending:null,stream:null,taskStream:null,captures:{},validationLog:[],paid:false,selectedDate:null,selectedTime:null,officeName:null,officeDate:null,officeTime:null,paymentMode:'photo',onboard:0,retakeLocalDone:false};
+const params=new URLSearchParams(location.search);
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const isMobile=/Android|Mobile|iPhone|iPad|iPod/i.test(navigator.userAgent)||isIOS;
+const requestedCamera=params.get('camera');
+const LIVE_CAMERA_MODE=requestedCamera==='live'||(requestedCamera!=='demo'&&isMobile&&window.isSecureContext);
+const DEMO_CAMERA=!LIVE_CAMERA_MODE;
+const STRICT_FIELD_TEST=LIVE_CAMERA_MODE && params.get('strict')!=='0';
+const EXPECTED_VIN=(params.get('vin')||(($('vinValue')&&$('vinValue').textContent)||'')).toUpperCase().replace(/[^A-Z0-9]/g,'');
+function readDisplayedPlate(){
+  for(const box of document.querySelectorAll('.applicationDataGrid > div')){
+    const label=(box.querySelector('small')?.textContent||'').trim().toUpperCase();
+    if(label.includes('ГРНЗ'))return (box.querySelector('strong')?.textContent||'').trim();
+  }
+  return '123 ABC 02';
+}
+const EXPECTED_PLATE=(params.get('plate')||readDisplayedPlate()).toUpperCase().replace(/[^A-Z0-9А-ЯЁ]/g,'');
+if(params.get('vin')&&$('vinValue'))$('vinValue').textContent=params.get('vin').toUpperCase();
+if(params.get('plate')){
+  for(const box of document.querySelectorAll('.applicationDataGrid > div')){
+    const label=(box.querySelector('small')?.textContent||'').trim().toUpperCase();
+    if(label.includes('ГРНЗ')){const el=box.querySelector('strong');if(el)el.textContent=params.get('plate').toUpperCase();break}
+  }
+}
 const names=['Способ','Документы','Кузов','Контроль','Проверка','Результат','Оплата'];
-// DEMO: localStorage only imitates recovery after page reload.
- // PRODUCTION: canonical state is saved on Eurasia backend after every accepted photo.
-const STORAGE_KEY='eurasia_inspection_demo_v13_no_camera';
+// В GitHub field-test фото остаются только в памяти текущей вкладки. В промышленной версии материалы должны сохраняться на backend.
+const STORAGE_KEY=LIVE_CAMERA_MODE?'eurasia_inspection_fieldtest_v14':'eurasia_inspection_demo_v14';
 function serializableState(){
   return {
     step:state.step,channel:state.channel,source:state.source,scenario:state.scenario,
@@ -1316,106 +1338,158 @@ function setTaskCameraStatus(kind,text){
 }
 function cameraErrorText(e){
   const name=(e&&e.name)||'';
-  if(name==='NotAllowedError'||name==='PermissionDeniedError')return 'Доступ к камере запрещен. Разрешите камеру для этого сайта и нажмите «Повторить запуск камеры».';
+  if(name==='NotAllowedError'||name==='PermissionDeniedError')return 'Доступ к камере запрещен. Разрешите камеру для этого сайта в Safari/Chrome и нажмите «Повторить запуск камеры».';
   if(name==='NotFoundError'||name==='DevicesNotFoundError')return 'Камера не найдена на устройстве.';
   if(name==='NotReadableError'||name==='TrackStartError')return 'Камера занята другим приложением или недоступна. Закройте другое приложение с камерой и повторите.';
-  if(name==='OverconstrainedError'||name==='ConstraintNotSatisfiedError')return 'Не удалось выбрать подходящую камеру. Повторите запуск.';
-  if(name==='SecurityError')return 'Браузер заблокировал камеру из-за настроек безопасности.';
+  if(name==='OverconstrainedError'||name==='ConstraintNotSatisfiedError')return 'Не удалось выбрать основную камеру. Повторите запуск.';
+  if(name==='SecurityError')return 'Браузер заблокировал камеру. Для живой съемки страница должна быть открыта по HTTPS.';
   return 'Не удалось запустить камеру. Проверьте разрешение камеры и повторите.';
 }
 function waitForVideoReady(v,timeout=8000){
   if(v&&v.readyState>=2&&v.videoWidth>0&&v.videoHeight>0)return Promise.resolve(true);
   return new Promise((resolve,reject)=>{
     let done=false;
-    const cleanup=()=>{
-      ['loadedmetadata','canplay','playing','resize'].forEach(ev=>v.removeEventListener(ev,onready));
-      clearTimeout(timer);
-    };
-    const onready=()=>{
-      if(!done&&v.readyState>=2&&v.videoWidth>0&&v.videoHeight>0){done=true;cleanup();resolve(true)}
-    };
+    const cleanup=()=>{['loadedmetadata','canplay','playing','resize'].forEach(ev=>v.removeEventListener(ev,onready));clearTimeout(timer)};
+    const onready=()=>{if(!done&&v.readyState>=2&&v.videoWidth>0&&v.videoHeight>0){done=true;cleanup();resolve(true)}};
     ['loadedmetadata','canplay','playing','resize'].forEach(ev=>v.addEventListener(ev,onready));
     const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('VIDEO_NOT_READY'))},timeout);
     onready();
   });
 }
+function setCameraModeUI(){
+  const live=LIVE_CAMERA_MODE;
+  if($('taskCameraEyebrow'))$('taskCameraEyebrow').textContent=live?'Полевая тестовая камера':'Демо-камера';
+  if($('demoCameraWatermark')){
+    $('demoCameraWatermark').classList.toggle('hidden',live);
+    $('demoCameraWatermark').textContent='ДЕМО · реальная камера не подключается';
+  }
+  if($('cameraModeTitle'))$('cameraModeTitle').textContent=live?'Полевая тестовая съемка':'Демонстрационный режим';
+  if($('cameraModeText'))$('cameraModeText').textContent=live
+    ?'Используется живая камера смартфона. Галерея недоступна. Для СРТС, VIN и ГРНЗ включена локальная OCR-сверка с данными заявки.'
+    :'Камера устройства не используется. Нажатие «Снять» имитирует текущую съемку и прохождение проверки.';
+}
+setCameraModeUI();
+
 async function startTaskCamera(){
   const btn=$('captureTaskBtn'),retry=$('retryCameraBtn'),v=$('taskVideo');
-  // DEMO ONLY: никаких вызовов getUserMedia и запросов разрешения камеры.
-  if(v){v.srcObject=null;v.classList.remove('active')}
-  if(retry)retry.classList.add('hidden');
-  setTaskCameraStatus('good','Демо-режим: камера устройства не подключается. Нажмите «Снять» для имитации кадра.');
-  if(btn)btn.disabled=false;
-  return true;
+  if(!LIVE_CAMERA_MODE){
+    if(v){v.srcObject=null;v.classList.remove('active')}
+    if(retry)retry.classList.add('hidden');
+    setTaskCameraStatus('good','Демо-режим: камера устройства не подключается. Нажмите «Снять» для имитации кадра.');
+    if(btn)btn.disabled=false;
+    return true;
+  }
+  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){
+    setTaskCameraStatus('bad','Живая камера недоступна: откройте страницу по HTTPS в Safari/Chrome.');
+    if(retry)retry.classList.remove('hidden');if(btn)btn.disabled=true;return false;
+  }
+  try{
+    stopTaskCamera();
+    setTaskCameraStatus('', 'Запускаем основную камеру…');
+    const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    state.taskStream=stream;v.srcObject=stream;v.classList.add('active');await v.play().catch(()=>{});await waitForVideoReady(v);
+    if(retry)retry.classList.add('hidden');if(btn)btn.disabled=false;
+    setTaskCameraStatus('good','Камера готова. Снимайте только текущий объект — выбор из галереи отключен.');
+    return true;
+  }catch(e){
+    stopTaskCamera();setTaskCameraStatus('bad',cameraErrorText(e));if(retry)retry.classList.remove('hidden');if(btn)btn.disabled=true;return false;
+  }
 }
 function stopTaskCamera(){
+  if(state.taskStream){state.taskStream.getTracks().forEach(t=>t.stop())}
   state.taskStream=null;
   if($('taskVideo')){$('taskVideo').srcObject=null;$('taskVideo').classList.remove('active')}
-  if($('captureTaskBtn'))$('captureTaskBtn').disabled=false;
-  if($('retryCameraBtn'))$('retryCameraBtn').classList.add('hidden');
+  if($('captureTaskBtn'))$('captureTaskBtn').disabled=LIVE_CAMERA_MODE;
 }
 async function openCapture(id,type,kind=null){
   const key=type==='damage'?(kind==='general'?'damageGeneral':'damageClose'):type==='equipment'?'equipment':id;
   state.pending={id,type,kind,key};
   const cfg=taskInstructions[key]||['Снимок','Наведите камеру на запрошенный объект.'];
-  $('taskCameraTitle').textContent=cfg[0];
-  $('taskCameraText').textContent=cfg[1];
-  $('taskCameraLabel').textContent=cfg[0];
-  $('taskPreviewWrap').classList.add('hidden');
-  $('captureTaskBtn').classList.remove('hidden');
-  $('captureTaskBtn').disabled=true;
-  $('retakeTaskBtn').classList.add('hidden');
-  $('retryCameraBtn').classList.add('hidden');
-  $('cameraSheet').classList.add('show');
-  await startTaskCamera();
+  $('taskCameraTitle').textContent=cfg[0];$('taskCameraText').textContent=cfg[1];$('taskCameraLabel').textContent=cfg[0];
+  $('taskPreviewWrap').classList.add('hidden');$('captureTaskBtn').classList.remove('hidden');$('captureTaskBtn').disabled=true;$('retakeTaskBtn').classList.add('hidden');$('retryCameraBtn').classList.add('hidden');
+  $('cameraSheet').classList.add('show');await startTaskCamera();
 }
 function closeTaskCamera(){stopTaskCamera();$('cameraSheet').classList.remove('show')}
-$('closeCameraSheet').onclick=closeTaskCamera;
-$('cancelTaskBtn').onclick=closeTaskCamera;
-$('retryCameraBtn').onclick=()=>startTaskCamera();
+$('closeCameraSheet').onclick=closeTaskCamera;$('cancelTaskBtn').onclick=closeTaskCamera;$('retryCameraBtn').onclick=()=>startTaskCamera();
 $('retakeTaskBtn').onclick=()=>{$('taskPreviewWrap').classList.add('hidden');$('captureTaskBtn').classList.remove('hidden');$('retakeTaskBtn').classList.add('hidden');startTaskCamera()};
 
-function grabTaskFrame(){
-  // DEMO ONLY: создаем синтетический кадр; камера устройства не используется.
-  const c=document.createElement('canvas');c.width=1280;c.height=720;
-  const ctx=c.getContext('2d');
-  const g=ctx.createLinearGradient(0,0,c.width,c.height);g.addColorStop(0,'#314b58');g.addColorStop(1,'#17272f');
-  ctx.fillStyle=g;ctx.fillRect(0,0,c.width,c.height);
-  ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=2;
-  for(let x=0;x<c.width;x+=c.width/3){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,c.height);ctx.stroke()}
-  for(let y=0;y<c.height;y+=c.height/3){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(c.width,y);ctx.stroke()}
-  ctx.fillStyle='rgba(255,255,255,.92)';ctx.textAlign='center';ctx.font='700 38px Arial';
-  ctx.fillText((state.pending&&taskInstructions[state.pending.key]&&taskInstructions[state.pending.key][0])||'Демо-снимок',c.width/2,c.height/2-10);
-  ctx.font='600 24px Arial';ctx.fillStyle='rgba(255,255,255,.72)';ctx.fillText('ДЕМО · камера устройства не подключена',c.width/2,c.height/2+42);
-  return c;
+function drawVideoFrame(v,maxW=1600){
+  if(!v||v.readyState<2||!v.videoWidth||!v.videoHeight)return null;
+  const scale=Math.min(1,maxW/v.videoWidth),c=document.createElement('canvas');c.width=Math.max(1,Math.round(v.videoWidth*scale));c.height=Math.max(1,Math.round(v.videoHeight*scale));
+  c.getContext('2d',{willReadFrequently:true}).drawImage(v,0,0,c.width,c.height);return c;
 }
-function taskFrameQuality(c){
-  const s=document.createElement('canvas'),w=160,h=Math.max(90,Math.round(160*c.height/c.width));s.width=w;s.height=h;
-  const ctx=s.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,0,0,w,h);const d=ctx.getImageData(0,0,w,h).data;
-  let total=0,white=0;for(let i=0;i<d.length;i+=4){total+=.299*d[i]+.587*d[i+1]+.114*d[i+2];if(d[i]>245&&d[i+1]>245&&d[i+2]>245)white++}
-  const lum=total/(d.length/4),glare=white/(d.length/4);return {ok:lum>=35&&lum<=225&&glare<.22,lum,glare};
+function grabTaskFrame(){
+  if(LIVE_CAMERA_MODE)return drawVideoFrame($('taskVideo'));
+  const c=document.createElement('canvas');c.width=1280;c.height=720;const ctx=c.getContext('2d');
+  const g=ctx.createLinearGradient(0,0,c.width,c.height);g.addColorStop(0,'#314b58');g.addColorStop(1,'#17272f');ctx.fillStyle=g;ctx.fillRect(0,0,c.width,c.height);
+  ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=2;for(let x=0;x<c.width;x+=c.width/3){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,c.height);ctx.stroke()}for(let y=0;y<c.height;y+=c.height/3){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(c.width,y);ctx.stroke()}
+  ctx.fillStyle='rgba(255,255,255,.92)';ctx.textAlign='center';ctx.font='700 38px Arial';ctx.fillText((state.pending&&taskInstructions[state.pending.key]&&taskInstructions[state.pending.key][0])||'Демо-снимок',c.width/2,c.height/2-10);ctx.font='600 24px Arial';ctx.fillStyle='rgba(255,255,255,.72)';ctx.fillText('ДЕМО · камера устройства не подключена',c.width/2,c.height/2+42);return c;
+}
+function frameMetrics(c){
+  const s=document.createElement('canvas'),w=180,h=Math.max(100,Math.round(w*c.height/c.width));s.width=w;s.height=h;const ctx=s.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,0,0,w,h);const d=ctx.getImageData(0,0,w,h).data;
+  const gray=new Float32Array(w*h);let total=0,white=0;
+  for(let p=0,i=0;i<d.length;i+=4,p++){const y=.299*d[i]+.587*d[i+1]+.114*d[i+2];gray[p]=y;total+=y;if(d[i]>245&&d[i+1]>245&&d[i+2]>245)white++}
+  let edge=0,count=0;for(let y=1;y<h;y++)for(let x=1;x<w;x++){const p=y*w+x;edge+=Math.abs(gray[p]-gray[p-1])+Math.abs(gray[p]-gray[p-w]);count+=2}
+  const lum=total/(w*h),glare=white/(w*h),sharp=edge/Math.max(1,count);
+  return {ok:lum>=32&&lum<=228&&glare<.25&&sharp>=3.2,lum,glare,sharp};
+}
+function taskFrameQuality(c){return frameMetrics(c)}
+
+let tesseractPromise=null;
+function loadTesseract(){
+  if(window.Tesseract)return Promise.resolve(window.Tesseract);
+  if(tesseractPromise)return tesseractPromise;
+  tesseractPromise=new Promise((resolve,reject)=>{
+    const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';sc.async=true;
+    sc.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error('OCR_LOAD'));sc.onerror=()=>reject(new Error('OCR_LOAD'));document.head.appendChild(sc);
+  });return tesseractPromise;
+}
+function normOCR(v){return (v||'').toUpperCase().replace(/[^A-Z0-9А-ЯЁ]/g,'')}
+function latinOCR(v){return (v||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
+async function ocrCanvas(c){
+  const T=await loadTesseract();
+  const r=await T.recognize(c,'eng',{logger:m=>{if(m.status==='recognizing text')setTaskCameraStatus('',`Распознаем данные… ${Math.round((m.progress||0)*100)}%`)}});
+  return (r&&r.data&&r.data.text)||'';
+}
+function containsExpected(text,expected){return !!expected && normOCR(text).includes(normOCR(expected))}
+function containsVin(text,expected){const t=latinOCR(text),e=latinOCR(expected);return !!e && t.includes(e)}
+async function validateCapturedIdentity(key,c){
+  if(!LIVE_CAMERA_MODE||!STRICT_FIELD_TEST||!['docFront','vinCar','plateCar'].includes(key))return {ok:true,message:DEMO_CAMERA?'✓ Демо-кадр сформирован и принят.':'✓ Кадр прошел локальную проверку качества.'};
+  try{
+    const text=await ocrCanvas(c);
+    const vinOk=containsVin(text,EXPECTED_VIN),plateOk=containsExpected(text,EXPECTED_PLATE);
+    if(key==='docFront'){
+      if(vinOk&&plateOk)return {ok:true,message:'✓ СРТС: VIN и ГРНЗ совпали с данными заявки.',ocr:text};
+      const miss=[];if(!vinOk)miss.push('VIN');if(!plateOk)miss.push('ГРНЗ');
+      return {ok:false,message:`Документ не подтвержден: ${miss.join(' и ')} не совпали с заявкой или не распознаны. Кадр не принят.`,ocr:text};
+    }
+    if(key==='vinCar')return vinOk?{ok:true,message:'✓ VIN на автомобиле совпал с заявкой.',ocr:text}:{ok:false,message:'VIN на автомобиле не совпал с заявкой или не распознан. Кадр не принят.',ocr:text};
+    if(key==='plateCar')return plateOk?{ok:true,message:'✓ ГРНЗ на автомобиле совпал с заявкой.',ocr:text}:{ok:false,message:'ГРНЗ на автомобиле не совпал с заявкой или не распознан. Кадр не принят.',ocr:text};
+  }catch(e){
+    return {ok:false,message:'OCR-проверка не выполнена. В строгом полевом тесте кадр не принимается без сверки. Проверьте интернет и повторите.'};
+  }
+  return {ok:true,message:'✓ Кадр принят.'};
 }
 $('captureTaskBtn').onclick=async()=>{
   const p=state.pending;if(!p)return;
-  const c=grabTaskFrame();if(!c){
-    $('captureTaskBtn').disabled=true;
-    setTaskCameraStatus('bad','Не удалось сформировать демо-кадр. Повторите съемку.');
-    return
+  const c=grabTaskFrame();if(!c){$('captureTaskBtn').disabled=true;setTaskCameraStatus('bad',LIVE_CAMERA_MODE?'Камера еще не готова. Повторите запуск.':'Не удалось сформировать демо-кадр. Повторите съемку.');return}
+  const q=taskFrameQuality(c);if(!q.ok){
+    let msg=q.lum<32?'Слишком темно. Добавьте освещение.':q.lum>228||q.glare>=.25?'Сильный пересвет или блик. Измените угол съемки.':'Кадр недостаточно резкий. Зафиксируйте телефон и повторите.';
+    setTaskCameraStatus('bad',msg);return
   }
-  const q=taskFrameQuality(c);if(!q.ok){$('taskCameraStatus').className='localQuality bad';$('taskCameraStatus').textContent=q.lum<35?'Слишком темно. Добавьте освещение.':'Сильный пересвет или блик. Измените угол съемки.';return}
-  const data=c.toDataURL('image/jpeg',.84);state.captures[p.key]=data;$('taskPreview').src=data;$('taskPreviewWrap').classList.remove('hidden');
-  $('taskCameraStatus').className='localQuality good';$('taskCameraStatus').textContent='✓ Демо-кадр сформирован и принят.';
+  $('captureTaskBtn').disabled=true;setTaskCameraStatus('',STRICT_FIELD_TEST&&['docFront','vinCar','plateCar'].includes(p.key)?'Сверяем распознанные данные с заявкой…':'Проверяем кадр…');
+  const check=await validateCapturedIdentity(p.key,c);
+  state.validationLog.push({key:p.key,ok:check.ok,message:check.message,ts:Date.now()});
+  if(!check.ok){setTaskCameraStatus('bad',check.message);$('captureTaskBtn').disabled=false;return}
+  const data=c.toDataURL('image/jpeg',.84);state.captures[p.key]=data;$('taskPreview').src=data;$('taskPreviewWrap').classList.remove('hidden');setTaskCameraStatus('good',check.message);
   if(p.type==='damage'){
-    state.damageDraft=state.damageDraft||{general:false,close:false};state.damageDraft[p.kind]=true;
-    const task=$(p.kind==='general'?'damageGeneralTask':'damageCloseTask'),btn=$(p.kind==='general'?'damageGeneralBtn':'damageCloseBtn');
-    task.classList.add('done');btn.classList.add('done');btn.textContent=p.kind==='general'?'✓ Общий план готов':'✓ Крупный план готов';checkDamageDraft();
+    state.damageDraft=state.damageDraft||{general:false,close:false};state.damageDraft[p.kind]=true;const task=$(p.kind==='general'?'damageGeneralTask':'damageCloseTask'),btn=$(p.kind==='general'?'damageGeneralBtn':'damageCloseBtn');task.classList.add('done');btn.classList.add('done');btn.textContent=p.kind==='general'?'✓ Общий план готов':'✓ Крупный план готов';checkDamageDraft();
   }else if(p.type==='equipment'){
     equipPhotoAttached=true;$('equipPhotoName').classList.remove('hidden');validateEquipForm();
   }else{
-    const el=$(p.id);el.classList.add('done');const btn=el.querySelector('button');btn.textContent='✓ Готово';btn.classList.add('done');
-    if(p.type==='doc'){state.docs.add(p.id);checkDocs()}else{state.ctrl.add(p.id);checkControl();persistState()}
+    const el=$(p.id);el.classList.add('done');const btn=el.querySelector('button');btn.textContent='✓ Готово';btn.classList.add('done');if(p.type==='doc'){state.docs.add(p.id);checkDocs()}else{state.ctrl.add(p.id);checkControl();persistState()}
   }
-  $('captureTaskBtn').classList.add('hidden');$('retakeTaskBtn').classList.remove('hidden');setTimeout(closeTaskCamera,500);
+  $('captureTaskBtn').classList.add('hidden');$('retakeTaskBtn').classList.remove('hidden');setTimeout(closeTaskCamera,650);
 };
 document.querySelectorAll('.captureDoc').forEach(b=>b.onclick=()=>openCapture(b.dataset.id,'doc'));
 document.querySelectorAll('.captureCtrl').forEach(b=>b.onclick=()=>openCapture(b.dataset.id,'ctrl'));
@@ -1424,95 +1498,48 @@ $('docsNext').onclick=()=>go(3);
 const angleNames=['Передняя левая сторона · 45°','Передняя правая сторона · 45°','Задняя правая сторона · 45°','Задняя левая сторона · 45°'];
 let busy=false;
 async function tryCamera(){
-  // DEMO ONLY: интерфейс имитирует камеру, но не обращается к устройству.
-  const v=$('video');if(v){v.srcObject=null;v.classList.remove('active')}
-  $('captureMsg').textContent='Демо-режим: реальная камера не подключается. Нажмите кнопку, чтобы имитировать снимок.';
-  return true;
+  const v=$('video');
+  if(!LIVE_CAMERA_MODE){if(v){v.srcObject=null;v.classList.remove('active')}$('captureMsg').textContent='Демо-режим: реальная камера не подключается. Нажмите кнопку, чтобы имитировать снимок.';return true}
+  if(state.stream&&state.stream.getVideoTracks().some(t=>t.readyState==='live')&&v?.videoWidth>0){v.classList.add('active');return true}
+  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){$('captureMsg').textContent='Живая камера недоступна. Откройте GitHub Pages по HTTPS в Safari/Chrome.';return false}
+  try{
+    if(state.stream)state.stream.getTracks().forEach(t=>t.stop());
+    state.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    v.srcObject=state.stream;v.classList.add('active');await v.play().catch(()=>{});await waitForVideoReady(v);$('captureMsg').textContent='Живая камера готова. Галерея недоступна — только текущая съемка.';return true;
+  }catch(e){$('captureMsg').textContent=cameraErrorText(e);return false}
 }
 function updateAngles(){
   $('angleCount').textContent=state.angles+' / 4';
   [...$('angleGrid').children].forEach((d,i)=>d.className='angle'+(i<state.angles?' done':(i===state.angles&&state.angles<4?' current':'')));
   if(state.angles<4){$('camLabel').textContent=angleNames[state.angles];$('captureBtn').textContent='Сделать снимок '+(state.angles+1)+' из 4'}else{$('camLabel').textContent='Все 4 ракурса готовы';$('captureBtn').textContent='✓ Все снимки сделаны';$('captureBtn').disabled=true;$('shutter').disabled=true;$('bodyNext').disabled=false;$('captureMsg').textContent='Осмотр кузова завершен. Можно продолжить.'}
 }
-
-function setQualityChip(id,status){
-  const el=$(id); if(!el)return;
-  el.classList.remove('qok','qbad','qwait');
-  el.classList.add(status||'qwait');
-}
-function setQualityMessage(kind,text){
-  const root=$('localQuality'); if(!root)return;
-  root.classList.remove('bad','good');
-  if(kind)root.classList.add(kind);
-  $('qMessage').textContent=text;
-}
-
+function setQualityChip(id,status){const el=$(id);if(!el)return;el.classList.remove('qok','qbad','qwait');el.classList.add(status||'qwait')}
+function setQualityMessage(kind,text){const root=$('localQuality');if(!root)return;root.classList.remove('bad','good');if(kind)root.classList.add(kind);$('qMessage').textContent=text}
 function analyzeVideoFrame(){
-  // DEMO ONLY: имитируем локальную проверку качества кадра.
-  return {available:true,ok:true,brightness:128,sharpness:12,glareRatio:0.03};
+  if(!LIVE_CAMERA_MODE)return {available:true,ok:true,brightness:128,sharpness:12,glareRatio:0.03,canvas:null};
+  const c=drawVideoFrame($('video'));if(!c)return {available:false,ok:false};const m=frameMetrics(c);return {available:true,ok:m.ok,brightness:m.lum,sharpness:m.sharp,glareRatio:m.glare,canvas:c};
 }
 async function captureAngle(){
-  if(busy||state.angles>=4)return;
-  busy=true;$('captureBtn').disabled=true;$('shutter').disabled=true;
-  $('captureMsg').innerHTML='<span class="loader"></span>Проверяем качество кадра на телефоне...';
-  ['qBlur','qLight','qCar','qScreen'].forEach(id=>setQualityChip(id,'qwait'));
-  setQualityMessage('', 'Проверяем кадр...');
-  const cameraOk=await tryCamera();
-  if(!cameraOk){
-    $('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;
-    setQualityMessage('bad','Не удалось запустить демо-сценарий. Повторите действие.');
-    return;
-  }
-
+  if(busy||state.angles>=4)return;busy=true;$('captureBtn').disabled=true;$('shutter').disabled=true;$('captureMsg').innerHTML='<span class="loader"></span>Проверяем качество кадра на телефоне…';
+  ['qBlur','qLight','qCar','qScreen'].forEach(id=>setQualityChip(id,'qwait'));setQualityMessage('', 'Проверяем кадр…');
+  const cameraOk=await tryCamera();if(!cameraOk){$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;setQualityMessage('bad','Камера не запущена. Разрешите доступ и повторите.');return}
   setTimeout(()=>{
-    let q=analyzeVideoFrame();
-    if(!q.available){
-      setQualityMessage('bad','Демо-кадр не сформирован. Повторите действие.');
-      $('captureMsg').textContent='Демо-кадр не сформирован. Повторите.';
-      $('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;
-      return;
-    }
-
-    // Demonstration of an immediate local retake: the first attempt fails once.
-    if(state.scenario==='retake' && !state.retakeLocalDone){
-      state.retakeLocalDone=true;
-      q={available:true,ok:false,brightness:29,sharpness:4};
-    }
-
+    let q=analyzeVideoFrame();if(!q.available){setQualityMessage('bad','Камера еще не сформировала кадр. Повторите.');$('captureMsg').textContent='Кадр не сформирован. Повторите.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return}
+    if(!LIVE_CAMERA_MODE&&state.scenario==='retake'&&!state.retakeLocalDone){state.retakeLocalDone=true;q={available:true,ok:false,brightness:29,sharpness:1.5,glareRatio:.03}}
     if(!q.ok){
-      let msg='Кадр нужно переснять.';
-      if(q.brightness<38)msg='Слишком темно. Перейдите на более светлое место.';
-      else if(q.brightness>220)msg='Слишком ярко. Избегайте прямого света.';
-      else if(q.sharpness<7)msg='Фото размыто. Замрите и дождитесь фокусировки.';
-      else if((q.glareRatio||0)>=0.18)msg='Сильный блик. Измените угол съемки.';
-      setQualityChip('qBlur',q.sharpness>=7?'qok':'qbad');
-      setQualityChip('qLight',(q.brightness>=38&&q.brightness<=220&&(q.glareRatio||0)<0.18)?'qok':'qbad');
-      setQualityChip('qCar','qwait');
-      setQualityChip('qScreen','qwait');
-      setQualityMessage('bad',msg);
-      $('captureMsg').textContent='Кадр не отправлен на сервер. Исправьте условие и снимите еще раз.';
-      $('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;
-      return;
+      let msg='Кадр нужно переснять.';if(q.brightness<32)msg='Слишком темно. Перейдите на более светлое место.';else if(q.brightness>228)msg='Слишком ярко. Избегайте прямого света.';else if(q.sharpness<3.2)msg='Фото размыто. Зафиксируйте телефон и дождитесь фокусировки.';else if((q.glareRatio||0)>=.25)msg='Сильный блик. Измените угол съемки.';
+      setQualityChip('qBlur',q.sharpness>=3.2?'qok':'qbad');setQualityChip('qLight',(q.brightness>=32&&q.brightness<=228&&(q.glareRatio||0)<.25)?'qok':'qbad');setQualityChip('qCar','qwait');setQualityChip('qScreen','qwait');setQualityMessage('bad',msg);$('captureMsg').textContent='Кадр не принят. Исправьте условие и снимите еще раз.';$('captureBtn').disabled=false;$('shutter').disabled=false;busy=false;return
     }
-
-    const liveFrame=document.createElement('canvas');liveFrame.width=1280;liveFrame.height=720;
-    const lctx=liveFrame.getContext('2d');const lg=lctx.createLinearGradient(0,0,1280,720);lg.addColorStop(0,'#35515e');lg.addColorStop(1,'#182a32');lctx.fillStyle=lg;lctx.fillRect(0,0,1280,720);
-    lctx.fillStyle='rgba(255,255,255,.92)';lctx.textAlign='center';lctx.font='700 42px Arial';lctx.fillText(angleNames[state.angles]||'Демо-ракурс',640,340);lctx.font='600 24px Arial';lctx.fillStyle='rgba(255,255,255,.72)';lctx.fillText('ДЕМО · камера устройства не подключена',640,390);
-    state.captures['angle'+state.angles]=liveFrame.toDataURL('image/jpeg',.84);
-    state.angles++;updateAngles();persistState();
-    setQualityChip('qBlur','qok');
-    setQualityChip('qLight','qok');
-    setQualityChip('qCar','qok');
-    setQualityChip('qScreen','qok');
-    setQualityMessage('good','Кадр прошел первичную проверку и принят');
-    if(state.angles<4){
-      $('captureBtn').disabled=false;$('shutter').disabled=false;
-      $('captureMsg').textContent='✓ Кадр принят и сохранен. Следующий ракурс.';
-    }
-    busy=false;
-  },650);
+    let liveFrame=q.canvas;
+    if(!liveFrame){liveFrame=document.createElement('canvas');liveFrame.width=1280;liveFrame.height=720;const lctx=liveFrame.getContext('2d');const lg=lctx.createLinearGradient(0,0,1280,720);lg.addColorStop(0,'#35515e');lg.addColorStop(1,'#182a32');lctx.fillStyle=lg;lctx.fillRect(0,0,1280,720);lctx.fillStyle='rgba(255,255,255,.92)';lctx.textAlign='center';lctx.font='700 42px Arial';lctx.fillText(angleNames[state.angles]||'Демо-ракурс',640,340);lctx.font='600 24px Arial';lctx.fillStyle='rgba(255,255,255,.72)';lctx.fillText('ДЕМО · камера устройства не подключена',640,390)}
+    state.captures['angle'+state.angles]=liveFrame.toDataURL('image/jpeg',.82);state.angles++;updateAngles();persistState();setQualityChip('qBlur','qok');setQualityChip('qLight','qok');
+    // В статическом GitHub-прототипе semantic CV/anti-spoof отсутствует: эти два признака не считаем доказанными.
+    setQualityChip('qCar',LIVE_CAMERA_MODE?'qwait':'qok');setQualityChip('qScreen',LIVE_CAMERA_MODE?'qwait':'qok');
+    setQualityMessage('good',LIVE_CAMERA_MODE?'Кадр принят по локальному качеству. Семантика автомобиля и anti-spoof требуют серверной модели.':'Кадр прошел первичную демо-проверку и принят');
+    if(state.angles<4){$('captureBtn').disabled=false;$('shutter').disabled=false;$('captureMsg').textContent='✓ Кадр сохранен. Следующий ракурс.'}busy=false;
+  },LIVE_CAMERA_MODE?250:650);
 }
-$('captureBtn').onclick=captureAngle;$('shutter').onclick=captureAngle;updateAngles();
+$('captureBtn').onclick=captureAngle;$('shutter').onclick=captureAngle;updateAngles();if(LIVE_CAMERA_MODE){$('captureMsg').textContent='Полевой тест: на смартфоне используется живая камера. Галерея отключена.';}
 function orientationHandler(e){
   if(state.step!==3)return;
   const tilt=Math.abs(Number(e.gamma||0));
@@ -1522,7 +1549,7 @@ if(window.DeviceOrientationEvent){
   window.addEventListener('deviceorientation',orientationHandler,{passive:true});
 }
 
-$('bodyNext').onclick=()=>{if(state.stream)state.stream.getTracks().forEach(t=>t.stop());go(4)};
+$('bodyNext').onclick=()=>{if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null}if($('video')){$('video').srcObject=null;$('video').classList.remove('active')}go(4)};
 
 function damageWord(n){
   const n10=n%10,n100=n%100;
@@ -1905,11 +1932,12 @@ $('geoBtn').onclick=()=>{
   $('geoBtn').disabled=true;
   $('geoStatus').textContent='Определяем местоположение...';
   const acceptDemo=()=>{
-    state.geo=true;
-    $('geoStatus').textContent='✓ Координаты осмотра зафиксированы (демо)';
-    $('geoBtn').textContent='Готово';
-    checkControl();
-    persistState();
+    if(LIVE_CAMERA_MODE){
+      state.geo=false;
+      $('geoStatus').textContent='Местоположение не подтверждено. Для полевого теста разрешите геолокацию и повторите.';
+      $('geoBtn').disabled=false;$('geoBtn').textContent='Повторить';checkControl();return;
+    }
+    state.geo=true;$('geoStatus').textContent='✓ Координаты осмотра зафиксированы (демо)';$('geoBtn').textContent='Готово';checkControl();persistState();
   };
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(
@@ -1942,7 +1970,7 @@ function resetAIView(){
   $('damageCheck').querySelector('span').textContent='Не обнаружены';
   $('decisionBox').className='notice green';
   $('decisionBox').querySelector('b').textContent='Осмотр подтвержден';
-  $('decisionBox').querySelector('p').textContent='Автоматические проверки пройдены. Осмотр подтвержден. Материалы и результат сохранены.';
+  $('decisionBox').querySelector('p').textContent=LIVE_CAMERA_MODE?'Полевые локальные проверки пройдены. СРТС/VIN/ГРНЗ сверены там, где доступна OCR-проверка. Серверная CV/anti-spoof модель в этом статическом GitHub-тесте не подключена.':'Автоматические проверки пройдены. Осмотр подтвержден. Материалы и результат сохранены.';
 }
 function fillDamageResult(){
   const list=$('damageDetectedBlock').querySelector('.soft');
